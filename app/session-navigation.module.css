@@ -1,0 +1,11 @@
+.navigation { width: min(1180px, calc(100% - 32px)); margin: 14px auto; padding: 14px 16px; border: 1px solid #d8d4e7; border-radius: 16px; color: #231942; background: rgba(255,255,255,.98); box-shadow: 0 8px 24px rgba(45,35,80,.08); }
+.navigation > strong { display: block; margin-bottom: 9px; font-size: .78rem; letter-spacing: .04em; text-transform: uppercase; }
+.navigation > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.navigation a, .navigation span { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; gap: 6px; padding: 8px 12px; border-radius: 10px; font-weight: 750; text-decoration: none; }
+.navigation a { color: #3f2b73; background: #f2effa; }
+.navigation a:hover, .navigation a:focus-visible { outline: 3px solid #f6bd60; outline-offset: 2px; background: #e9e2f7; }
+.current { color: #fff; background: #563d7c; }
+.disabled { color: #686276; border: 1px dashed #bbb4c8; background: #f4f3f6; cursor: not-allowed; }
+.navigation small { font-size: .64rem; font-weight: 650; }
+.bottom { margin-top: 34px; margin-bottom: 24px; }
+@media (max-width: 640px) { .navigation { width: min(100% - 20px, 1180px); padding: 12px; } .navigation > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); } .navigation a, .navigation span { width: 100%; } }

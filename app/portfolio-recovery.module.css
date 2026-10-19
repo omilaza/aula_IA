@@ -1,0 +1,210 @@
+.panel {
+  padding: clamp(1.1rem, 3vw, 2rem);
+  border: 1px solid rgba(55, 48, 107, 0.22);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 95% 5%, rgba(255, 214, 126, 0.28), transparent 32%),
+    linear-gradient(145deg, #f8f6fc, #fffdf7);
+  color: #26233b;
+  box-shadow: 0 18px 45px rgba(55, 48, 107, 0.09);
+}
+
+.heading {
+  max-width: 760px;
+}
+
+.heading > span {
+  color: #6d4f00;
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.heading h2 {
+  margin: 0.35rem 0 0.55rem;
+  color: #37306b;
+  font-size: clamp(1.45rem, 3vw, 2.05rem);
+  line-height: 1.12;
+}
+
+.heading p,
+.note,
+.status,
+.portfolioAction p,
+.cards p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.search {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 1.4rem;
+}
+
+.search label {
+  font-weight: 800;
+}
+
+.searchRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.7rem;
+}
+
+.search input {
+  min-width: 0;
+  min-height: 48px;
+  padding: 0.72rem 0.85rem;
+  border: 1px solid rgba(55, 48, 107, 0.35);
+  border-radius: 12px;
+  background: #fff;
+  color: #26233b;
+  font: inherit;
+}
+
+.search input:focus-visible,
+.panel button:focus-visible {
+  outline: 3px solid rgba(209, 146, 0, 0.45);
+  outline-offset: 2px;
+}
+
+.panel button {
+  min-height: 44px;
+  padding: 0.68rem 1rem;
+  border: 1px solid #37306b;
+  border-radius: 999px;
+  background: #37306b;
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.panel button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1.4rem;
+}
+
+.cards article {
+  display: flex;
+  min-width: 0;
+  min-height: 200px;
+  padding: 1rem;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid rgba(55, 48, 107, 0.18);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.cards article > div > span {
+  display: inline-flex;
+  padding: 0.22rem 0.55rem;
+  border-radius: 999px;
+  background: #eee9f7;
+  color: #37306b;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.cards h3 {
+  margin: 0.65rem 0 0.35rem;
+  font-size: 1.02rem;
+}
+
+.cards button {
+  width: 100%;
+  padding-inline: 0.65rem;
+  font-size: 0.88rem;
+}
+
+.available {
+  box-shadow: inset 0 4px 0 #2d8a67;
+}
+
+.missing {
+  color: #625f70;
+  box-shadow: inset 0 4px 0 #c8c2d4;
+}
+
+.portfolioAction {
+  display: flex;
+  margin-top: 1rem;
+  padding: 1rem 1.1rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-radius: 18px;
+  background: #37306b;
+  color: #fff;
+}
+
+.portfolioAction strong {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 1.1rem;
+}
+
+.portfolioAction button {
+  flex: 0 0 auto;
+  border-color: #fff;
+  background: #fff;
+  color: #37306b;
+}
+
+.note {
+  margin-top: 1rem;
+  color: #625f70;
+  font-size: 0.9rem;
+}
+
+.status {
+  margin-top: 0.75rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 10px;
+  background: rgba(45, 138, 103, 0.1);
+  color: #175d46;
+  font-weight: 700;
+}
+
+.statusError {
+  background: rgba(167, 49, 58, 0.1);
+  color: #8c2630;
+}
+
+@media (max-width: 980px) {
+  .cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .searchRow,
+  .cards {
+    grid-template-columns: 1fr;
+  }
+
+  .searchRow button,
+  .portfolioAction button {
+    width: 100%;
+  }
+
+  .portfolioAction {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .cards article {
+    min-height: 0;
+  }
+}

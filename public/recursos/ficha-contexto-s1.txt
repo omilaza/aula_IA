@@ -1,0 +1,27 @@
+FICHA DE CONTEXTO AULA-IA · SESIÓN 1
+De la pregunta rápida al trabajo con contexto
+
+No escribas nombres, matrículas, diagnósticos ni otros datos identificables.
+
+ANALIZAR
+1. Tema o necesidad:
+2. Nivel y grado/semestre:
+3. Asignatura o campo:
+4. Características relevantes del grupo, anonimizadas:
+5. Propósito de aprendizaje observable:
+6. Tiempo disponible:
+7. Recursos disponibles:
+8. Producto o evidencia esperada:
+9. Restricciones y privacidad:
+10. Inclusión y accesibilidad:
+11. Hechos, cifras o referencias que deberán verificarse:
+12. Formato de salida útil para el docente:
+
+USAR
+Construye una petición genérica V1 y una petición contextualizada V2.
+
+LEER
+Compara: pertinencia, viabilidad, privacidad, inclusión, fuentes y supuestos.
+
+AJUSTAR
+Corrige la petición o decide no usar la salida. El juicio final es docente.

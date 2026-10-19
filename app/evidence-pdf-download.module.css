@@ -1,0 +1,108 @@
+.panel {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid rgba(79, 64, 125, 0.24);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(238, 233, 247, 0.88), rgba(255, 241, 213, 0.68));
+  color: #26233b;
+}
+
+.panel h3,
+.panel p {
+  margin: 0 0 0.65rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.primary,
+.secondary {
+  min-height: 44px;
+  padding: 0.7rem 1rem;
+  border-radius: 999px;
+  border: 1px solid #37306b;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.primary {
+  color: #fff;
+  background: #37306b;
+}
+
+.secondary {
+  color: #37306b;
+  background: #fff;
+}
+
+.primary:disabled,
+.secondary:disabled {
+  cursor: wait;
+  opacity: 0.64;
+}
+
+.code {
+  display: block;
+  max-width: 100%;
+  margin: 0.65rem 0;
+  padding: 0.65rem;
+  overflow-wrap: anywhere;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.8);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.84rem;
+}
+
+.recovery {
+  margin-top: 0.8rem;
+}
+
+.recovery summary {
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.form {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 0.8rem;
+}
+
+.form label {
+  display: grid;
+  gap: 0.3rem;
+  font-weight: 650;
+}
+
+.form input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid rgba(55, 48, 107, 0.35);
+  border-radius: 10px;
+  background: #fff;
+  color: #26233b;
+  font: inherit;
+}
+
+.status {
+  margin-top: 0.65rem !important;
+  font-size: 0.92rem;
+}
+
+@media (max-width: 640px) {
+  .actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .primary,
+  .secondary {
+    width: 100%;
+  }
+}

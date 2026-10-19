@@ -1,0 +1,51 @@
+﻿ID ficticio,Grupo ficticio,Criterio K1 (1-4),Criterio K2 (1-4),Criterio K3 (1-4),Criterio K4 (1-4),Promedio ficticio (1-4),Evidencia entregada,Nivel de desempeño,Origen de los datos
+G1-01,G1,4,4,3,4,3.75,Sí,Destacado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G1-02,G1,3,4,3,3,3.25,Sí,Logrado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G1-03,G1,4,3,4,4,3.75,Sí,Destacado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G1-04,G1,3,3,3,3,3,Sí,Logrado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G1-05,G1,4,4,4,4,4,Sí,Destacado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G1-06,G1,3,3,2,3,2.75,Sí,Logrado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G1-07,G1,4,3,3,4,3.5,Sí,Destacado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G1-08,G1,3,4,4,3,3.5,Sí,Destacado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G1-09,G1,2,3,3,3,2.75,Sí,Logrado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G1-10,G1,4,4,3,3,3.5,Sí,Destacado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G1-11,G1,3,3,4,3,3.25,Sí,Logrado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G1-12,G1,4,3,4,3,3.5,Sí,Destacado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G1-13,G1,3,4,3,4,3.5,Sí,Destacado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G1-14,G1,2,3,2,3,2.5,Sí,En desarrollo,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G1-15,G1,3,3,3,4,3.25,Sí,Logrado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G1-16,G1,4,4,4,3,3.75,Sí,Destacado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G1-17,G1,3,2,3,3,2.75,Sí,Logrado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G2-01,G2,3,3,3,3,3,Sí,Logrado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G2-02,G2,3,2,3,3,2.75,Sí,Logrado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G2-03,G2,2,3,2,3,2.5,Sí,En desarrollo,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G2-04,G2,3,3,2,2,2.5,Sí,En desarrollo,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G2-05,G2,4,3,3,3,3.25,Sí,Logrado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G2-06,G2,2,2,3,2,2.25,Sí,En desarrollo,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G2-07,G2,3,3,3,2,2.75,Sí,Logrado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G2-08,G2,2,3,3,3,2.75,Sí,Logrado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G2-09,G2,3,2,2,3,2.5,Sí,En desarrollo,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G2-10,G2,4,4,3,3,3.5,Sí,Destacado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G2-11,G2,2,2,2,2,2,Sí,En desarrollo,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G2-12,G2,3,3,4,3,3.25,Sí,Logrado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G2-13,G2,3,2,3,2,2.5,Sí,En desarrollo,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G2-14,G2,2,3,2,2,2.25,Sí,En desarrollo,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G2-15,G2,3,3,3,4,3.25,Sí,Logrado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G2-16,G2,2,2,3,3,2.5,Sí,En desarrollo,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G2-17,G2,,,,,,No,Sin evidencia,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G3-01,G3,2,2,2,3,2.25,Sí,En desarrollo,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G3-02,G3,3,2,2,2,2.25,Sí,En desarrollo,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G3-03,G3,2,3,2,2,2.25,Sí,En desarrollo,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G3-04,G3,1,2,2,2,1.75,Sí,Inicial,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G3-05,G3,3,3,2,3,2.75,Sí,Logrado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G3-06,G3,2,2,3,2,2.25,Sí,En desarrollo,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G3-07,G3,1,2,1,2,1.5,Sí,Inicial,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G3-08,G3,3,2,3,3,2.75,Sí,Logrado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G3-09,G3,2,2,2,2,2,Sí,En desarrollo,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G3-10,G3,2,3,3,2,2.5,Sí,En desarrollo,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G3-11,G3,1,1,2,2,1.5,Sí,Inicial,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G3-12,G3,3,3,3,3,3,Sí,Logrado,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G3-13,G3,2,1,2,2,1.75,Sí,Inicial,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G3-14,G3,2,2,3,3,2.5,Sí,En desarrollo,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G3-15,G3,1,2,2,1,1.5,Sí,Inicial,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales
+G3-16,G3,,,,,,No,Sin evidencia,SIMULACIÓN AULA-IA · No corresponde a estudiantes reales

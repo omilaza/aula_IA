@@ -1,0 +1,18 @@
+BANCO DE PROMPTS · SESIÓN 1
+
+1. BÁSICO · ACTIVIDAD CONTEXTUALIZADA
+Actúa como apoyo para el diseño didáctico. Diseña una actividad para [nivel] en [asignatura] que ayude a [propósito]. Dispongo de [tiempo] y [recursos]. El producto será [evidencia]. Presenta la respuesta en [formato]. No inventes referencias ni datos; señala qué debo verificar.
+
+2. INTERMEDIO · REVISIÓN PEDAGÓGICA
+Compara las respuestas V1 y V2 con estos criterios: pertinencia para el grupo, alineación con el propósito, viabilidad, inclusión, privacidad y afirmaciones por verificar. Entrega una tabla con fortalezas, riesgos y ajuste recomendado. No reescribas todavía la actividad.
+
+3. AVANZADO · PREGUNTAS Y SUPUESTOS
+Antes de proponer, formula hasta tres preguntas aclaratorias si falta información esencial. Después declara tus supuestos, diseña una opción viable, identifica riesgos de uso y ofrece una alternativa equivalente sin IA. No inventes fuentes, currículo ni cifras.
+
+4. CONTROL DE INVENCIONES
+Separa tu salida en: a) propuesta; b) hechos o cifras que requieren fuente; c) supuestos utilizados; d) información que falta; e) decisiones que corresponden al docente.
+
+5. AJUSTE INCLUSIVO
+Revisa esta actividad para eliminar barreras de participación. Propón dos ajustes accesibles que no cambien el propósito ni requieran recursos inexistentes. Explica brevemente qué barrera atiende cada ajuste.
+
+Recordatorio: nunca pegues datos identificables de estudiantes. Una respuesta convincente no siempre es correcta.
