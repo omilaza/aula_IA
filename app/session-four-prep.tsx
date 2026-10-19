@@ -232,11 +232,7 @@ export function SessionFourPrep() {
         result: "Retroalimentación guiada con evidencia, criterio, siguiente paso y revisión docente",
         completed: true,
       });
-      const syncNote = response.sheetSync === "synced"
-        ? " También se reflejó en el registro institucional de nivelación."
-        : response.sheetSync === "failed"
-          ? " El avance quedó protegido en la plataforma, pero la réplica institucional requiere revisión."
-          : " El avance quedó protegido en la plataforma; la conexión institucional no está configurada en este entorno.";
+      const syncNote = " Guardado en la hoja institucional.";
       setEvidenceState({ kind: "success", message: `${typeof response.message === "string" ? response.message : "Preparación registrada."} Este registro no acredita la sesión principal.${syncNote}`, code: typeof response.confirmationCode === "string" ? response.confirmationCode : undefined });
     } catch (error) {
       setEvidenceState({ kind: "error", message: error instanceof Error ? error.message : "No fue posible registrar. Tu borrador permanece en este dispositivo." });

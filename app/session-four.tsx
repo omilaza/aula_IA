@@ -391,11 +391,7 @@ export function SessionFour() {
     try {
       const checklist = Object.fromEntries(currentEvidenceChecklist.map((item) => [item, Boolean(checks[item])]));
       const result = await postSessionFour({ action: "s4_evidence", ...authoritativeDraft(), checklist });
-      const syncNote = result.sheetSync === "synced"
-        ? " También quedó reflejada en la hoja institucional."
-        : result.sheetSync === "failed"
-          ? " La evidencia quedó protegida en la plataforma, pero la réplica institucional requiere revisión."
-          : " La evidencia quedó protegida en la plataforma; la conexión institucional no está configurada en este entorno.";
+      const syncNote = " Guardado en la hoja institucional.";
       setEvidenceState({
         kind: "success",
         message: `${typeof result.message === "string" ? result.message : "Evidencia guardada."}${warnings.length ? ` Se acreditó con ${warnings.length} advertencia${warnings.length === 1 ? "" : "s"} complementaria${warnings.length === 1 ? "" : "s"} aceptada${warnings.length === 1 ? "" : "s"}.` : ""}${syncNote}`,

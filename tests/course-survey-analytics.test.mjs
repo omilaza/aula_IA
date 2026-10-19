@@ -48,16 +48,17 @@ test("course survey analytics has an honest professional empty state", async () 
   assert.equal(result.synchronization.state, "empty");
 });
 
-test("analytics endpoint selects only non-identifiable D1 fields", async () => {
+test("analytics endpoint requests only non-identifiable Sheets fields", async () => {
   const route = await read("../app/api/course-survey-analytics/route.ts");
-  const selectStart = route.indexOf(".select({");
-  const selectEnd = route.indexOf("})", selectStart);
+  const selectStart = route.indexOf("columns: [");
+  const selectEnd = route.indexOf("]", selectStart);
   const selectedFields = route.slice(selectStart, selectEnd);
 
   assert.match(route, /export async function GET\(request: Request\)/);
   assert.doesNotMatch(route, /export async function (?:POST|PUT|PATCH|DELETE)/);
-  assert.match(route, /\.from\(courseSatisfactionSurveyResponses\)/);
-  assert.match(route, /\.leftJoin\(\s*courseSatisfactionSurveySync,/s);
+  assert.match(route, /db\.find\(courseSatisfactionSurveyResponses,/);
+  assert.doesNotMatch(route, /courseSatisfactionSurveySync|\.leftJoin\(/);
+  assert.match(route, /sheetSyncStatus: "synced"/);
   assert.match(route, /computeCourseSurveyAnalytics/);
   assert.match(route, /"Cache-Control": "no-store, private"/);
   assert.match(route, /No se muestran cifras parciales/);
@@ -72,7 +73,6 @@ test("analytics endpoint selects only non-identifiable D1 fields", async () => {
     "materialsRating",
     "materialsNotUsed",
     "recommendationApplication",
-    "sheetSyncStatus",
   ]) {
     assert.match(selectedFields, new RegExp(`\\b${field}\\b`));
   }

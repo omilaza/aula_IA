@@ -1,5 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
-import { getDb } from "../../../db";
+import { getDb, increment, currentTimestamp } from "../../../db";
 import { attendance, sessionSixEvidence } from "../../../db/schema";
 import { createPdfAccessCode } from "../../evidence-pdf-server";
 
@@ -78,11 +77,7 @@ function routeError(error: unknown) {
 
 async function participantIdFor(email: string) {
   const db = getDb();
-  const [evidence] = await db
-    .select({ participantId: sessionSixEvidence.participantId })
-    .from(sessionSixEvidence)
-    .where(and(eq(sessionSixEvidence.email, email), eq(sessionSixEvidence.session, SESSION)))
-    .limit(1);
+  const [evidence] = await db.find(sessionSixEvidence, { email, session: SESSION }, { columns: ["participantId"], limit: 1 });
   return evidence?.participantId || confirmationCode("PAR");
 }
 
@@ -134,27 +129,21 @@ export async function POST(request: Request) {
         );
       }
 
-      const [existing] = await db
-        .select({ id: attendance.id })
-        .from(attendance)
-        .where(and(eq(attendance.email, email), eq(attendance.session, SESSION)))
-        .limit(1);
+      const [existing] = await db.find(attendance, { email, session: SESSION }, { columns: ["id"], limit: 1 });
       const code = confirmationCode("AS6");
 
-      await db
-        .insert(attendance)
-        .values({ email, fullName, institution, role, session: SESSION, consent, confirmationCode: code })
-        .onConflictDoUpdate({
-          target: [attendance.session, attendance.email],
-          set: {
-            fullName,
-            institution,
-            role,
-            consent,
-            confirmationCode: code,
-            createdAt: sql`CURRENT_TIMESTAMP`,
-          },
-        });
+      await db.upsert(
+        attendance,
+        { email, fullName, institution, role, session: SESSION, consent, confirmationCode: code },
+        {
+          fullName,
+          institution,
+          role,
+          consent,
+          confirmationCode: code,
+          createdAt: currentTimestamp,
+        },
+      );
 
       return Response.json(
         {
@@ -163,6 +152,7 @@ export async function POST(request: Request) {
           folio: code,
           message: "Tu asistencia a la Sesión 6 fue registrada correctamente.",
           updatedPreviousResponse: Boolean(existing),
+          sheetSync: "synced",
         },
         { status: existing ? 200 : 201 },
       );
@@ -235,11 +225,7 @@ export async function POST(request: Request) {
         );
       }
 
-      const [registeredAttendance] = await db
-        .select({ fullName: attendance.fullName })
-        .from(attendance)
-        .where(and(eq(attendance.email, email), eq(attendance.session, SESSION)))
-        .limit(1);
+      const [registeredAttendance] = await db.find(attendance, { email, session: SESSION }, { columns: ["fullName"], limit: 1 });
       if (!registeredAttendance) {
         return Response.json(
           {
@@ -250,22 +236,14 @@ export async function POST(request: Request) {
         );
       }
 
-      const [existing] = await db
-        .select({ participantId: sessionSixEvidence.participantId })
-        .from(sessionSixEvidence)
-        .where(and(
-          eq(sessionSixEvidence.email, email),
-          eq(sessionSixEvidence.session, SESSION),
-          eq(sessionSixEvidence.activity, MAIN_ACTIVITY),
-        ))
-        .limit(1);
+      const [existing] = await db.find(sessionSixEvidence, { email, session: SESSION, activity: MAIN_ACTIVITY }, { columns: ["participantId"], limit: 1 });
       const participantId = existing?.participantId || (await participantIdFor(email));
       const code = confirmationCode("EV6");
       const checklistJson = JSON.stringify(checklistResult.checklist);
 
-      await db
-        .insert(sessionSixEvidence)
-        .values({
+      await db.upsert(
+        sessionSixEvidence,
+        {
           participantId,
           fullName: registeredAttendance.fullName,
           email,
@@ -293,42 +271,36 @@ export async function POST(request: Request) {
           checklistJson,
           status: "recibida",
           confirmationCode: code,
-        })
-        .onConflictDoUpdate({
-          target: [
-            sessionSixEvidence.email,
-            sessionSixEvidence.session,
-            sessionSixEvidence.activity,
-          ],
-          set: {
-            fullName: registeredAttendance.fullName,
-            route,
-            projectTitle,
-            teachingNeed,
-            educationalLevel,
-            subject,
-            pedagogicalContext,
-            learningPurpose,
-            sourceTraceability,
-            prompt,
-            activitySequence,
-            assessmentEvidence,
-            instrumentCriteria,
-            analysisLimits,
-            teacherDecision,
-            followUpEvidence,
-            adaptation,
-            aiContribution,
-            teacherReview,
-            implementationStep,
-            checklistJson,
-            attempt: sql`${sessionSixEvidence.attempt} + 1`,
-            responseVersion: sql`${sessionSixEvidence.responseVersion} + 1`,
-            status: "recibida",
-            confirmationCode: code,
-            updatedAt: sql`CURRENT_TIMESTAMP`,
-          },
-        });
+        },
+        {
+          fullName: registeredAttendance.fullName,
+          route,
+          projectTitle,
+          teachingNeed,
+          educationalLevel,
+          subject,
+          pedagogicalContext,
+          learningPurpose,
+          sourceTraceability,
+          prompt,
+          activitySequence,
+          assessmentEvidence,
+          instrumentCriteria,
+          analysisLimits,
+          teacherDecision,
+          followUpEvidence,
+          adaptation,
+          aiContribution,
+          teacherReview,
+          implementationStep,
+          checklistJson,
+          attempt: increment(1),
+          responseVersion: increment(1),
+          status: "recibida",
+          confirmationCode: code,
+          updatedAt: currentTimestamp,
+        },
+      );
 
       const pdfAccessCode = await createPdfAccessCode("S6", email, code);
       return Response.json(
@@ -339,6 +311,7 @@ export async function POST(request: Request) {
           pdfAccessCode,
           message: "Tu producto final integrado de la Sesión 6 fue guardado correctamente.",
           updatedPreviousResponse: Boolean(existing),
+          sheetSync: "synced",
         },
         { status: existing ? 200 : 201 },
       );

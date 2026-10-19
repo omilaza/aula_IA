@@ -370,11 +370,7 @@ export function SessionThree() {
         ...authoritativeDraft(),
         checklist,
       });
-      const syncNote = result.sheetSync === "synced"
-        ? " También quedó reflejada en la hoja institucional."
-        : result.sheetSync === "failed"
-          ? " La evidencia quedó protegida en la plataforma, pero la réplica institucional requiere revisión."
-          : " La evidencia quedó protegida en la plataforma; la conexión institucional no está configurada en este entorno.";
+      const syncNote = " Guardado en la hoja institucional.";
       setEvidenceState({
         kind: "success",
         message: `${typeof result.message === "string" ? result.message : "Evidencia guardada."}${syncNote}`,

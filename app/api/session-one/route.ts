@@ -1,5 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
-import { getDb } from "../../../db";
+import { getDb, currentTimestamp } from "../../../db";
 import {
   attendance,
   diagnostics,
@@ -7,7 +6,7 @@ import {
   icebreakerResponses,
   labEvidence,
 } from "../../../db/schema";
-import { syncToInstitutionalSheet } from "../../sheets-sync";
+
 import { createPdfAccessCode } from "../../evidence-pdf-server";
 
 const categories = new Set([
@@ -71,14 +70,7 @@ export async function GET(request: Request) {
 
   try {
     const db = getDb();
-    const rows = await db
-      .select({
-        category: icebreakerResponses.category,
-        count: sql<number>`count(*)`,
-      })
-      .from(icebreakerResponses)
-      .where(eq(icebreakerResponses.session, "S1"))
-      .groupBy(icebreakerResponses.category);
+    const rows = await db.countBy(icebreakerResponses, { session: "S1" }, "category");
 
     const total = rows.reduce((sum, row) => sum + Number(row.count), 0);
     return Response.json({
@@ -109,9 +101,9 @@ export async function POST(request: Request) {
       if (!categories.has(category) || task.length < 4) {
         return Response.json({ error: "Completa la tarea y selecciona una categoría." }, { status: 400 });
       }
-      await db.insert(icebreakerResponses).values({ category, task });
-      const sheetSync = await syncToInstitutionalSheet({ action, category, task });
-      return Response.json({ ok: true, sheetSync: sheetSync.status }, { status: 201 });
+      await db.insert(icebreakerResponses, { category, task });
+
+      return Response.json({ ok: true, sheetSync: "synced" }, { status: 201 });
     }
 
     if (action === "attendance") {
@@ -124,24 +116,9 @@ export async function POST(request: Request) {
         return Response.json({ error: "Revisa los campos obligatorios y el aviso de privacidad." }, { status: 400 });
       }
       const confirmationCode = code("AS1");
-      await db
-        .insert(attendance)
-        .values({ email, fullName, institution, role, consent, confirmationCode })
-        .onConflictDoUpdate({
-          target: [attendance.session, attendance.email],
-          set: { fullName, institution, role, consent, confirmationCode, createdAt: sql`CURRENT_TIMESTAMP` },
-        });
-      const sheetSync = await syncToInstitutionalSheet({
-        action,
-        session: "S1",
-        email,
-        fullName,
-        institution,
-        role,
-        consent,
-        confirmationCode,
-      });
-      return Response.json({ ok: true, confirmationCode, sheetSync: sheetSync.status }, { status: 201 });
+      await db.upsert(attendance, { email, fullName, institution, role, consent, confirmationCode }, { fullName, institution, role, consent, confirmationCode, createdAt: currentTimestamp });
+
+      return Response.json({ ok: true, confirmationCode, sheetSync: "synced" }, { status: 201 });
     }
 
     if (action === "diagnostic") {
@@ -162,36 +139,26 @@ export async function POST(request: Request) {
         return score + (knowledgeKey[key] === value ? 1 : 0);
       }, 0);
       const confirmationCode = code("DS1");
-      await db
-        .insert(diagnostics)
-        .values({
+      await db.upsert(
+        diagnostics,
+        {
           email,
           phase,
           answersJson: JSON.stringify(answers),
           likertAverage,
           knowledgeScore,
           confirmationCode,
-        })
-        .onConflictDoUpdate({
-          target: [diagnostics.phase, diagnostics.email],
-          set: {
-            answersJson: JSON.stringify(answers),
-            likertAverage,
-            knowledgeScore,
-            confirmationCode,
-            createdAt: sql`CURRENT_TIMESTAMP`,
-          },
-        });
-      const sheetSync = await syncToInstitutionalSheet({
-        action,
-        phase,
-        email,
-        answers,
-        likertAverage: likertAverage / 100,
-        knowledgeScore,
-        confirmationCode,
-      });
-      return Response.json({ ok: true, confirmationCode, knowledgeScore, likertAverage: likertAverage / 100, sheetSync: sheetSync.status }, { status: 201 });
+        },
+        {
+          answersJson: JSON.stringify(answers),
+          likertAverage,
+          knowledgeScore,
+          confirmationCode,
+          createdAt: currentTimestamp,
+        },
+      );
+
+      return Response.json({ ok: true, confirmationCode, knowledgeScore, likertAverage: likertAverage / 100, sheetSync: "synced" }, { status: 201 });
     }
 
     if (action === "lab") {
@@ -226,12 +193,12 @@ export async function POST(request: Request) {
       if (missingChecklistItems.length || yesCount < 6) {
         return Response.json({ error: `${missingChecklistItems.length ? `Valora los diez indicadores. Pendientes: ${missingChecklistItems.join("; ")}. ` : ""}Se requieren al menos 6 respuestas Sí; actualmente hay ${yesCount}.`, fields: missingChecklistItems.length ? missingChecklistItems : ["Al menos seis respuestas Sí"] }, { status: 400 });
       }
-      const [registeredAttendance] = await db.select({ id: attendance.id }).from(attendance).where(and(eq(attendance.email, email), eq(attendance.session, "S1"))).limit(1);
+      const [registeredAttendance] = await db.find(attendance, { email, session: "S1" }, { columns: ["id"], limit: 1 });
       if (!registeredAttendance) return Response.json({ error: "Primero registra tu asistencia a la Sesión 1 con este mismo correo.", fields: ["Correo para vincular la evidencia"] }, { status: 400 });
       const evidenceCode = code("LAB1");
-      await db
-        .insert(labEvidence)
-        .values({
+      await db.upsert(
+        labEvidence,
+        {
           email,
           route,
           caseKey,
@@ -243,40 +210,23 @@ export async function POST(request: Request) {
           review,
           checklistJson: JSON.stringify(checklist),
           evidenceCode,
-        })
-        .onConflictDoUpdate({
-          target: [labEvidence.session, labEvidence.email],
-          set: {
-            route,
-            caseKey,
-            contextJson: JSON.stringify(context),
-            promptV1,
-            promptV2,
-            responseV1,
-            responseV2,
-            review,
-            checklistJson: JSON.stringify(checklist),
-            evidenceCode,
-            createdAt: sql`CURRENT_TIMESTAMP`,
-          },
-        });
-      const sheetSync = await syncToInstitutionalSheet({
-        action,
-        session: "S1",
-        email,
-        route,
-        caseKey,
-        context,
-        promptV1,
-        promptV2,
-        responseV1,
-        responseV2,
-        review,
-        checklist,
-        yesCount,
-        evidenceCode,
-      });
-      return Response.json({ ok: true, evidenceCode, sheetSync: sheetSync.status }, { status: 201 });
+        },
+        {
+          route,
+          caseKey,
+          contextJson: JSON.stringify(context),
+          promptV1,
+          promptV2,
+          responseV1,
+          responseV2,
+          review,
+          checklistJson: JSON.stringify(checklist),
+          evidenceCode,
+          createdAt: currentTimestamp,
+        },
+      );
+
+      return Response.json({ ok: true, evidenceCode, sheetSync: "synced" }, { status: 201 });
     }
 
     if (action === "exit") {
@@ -296,11 +246,7 @@ export async function POST(request: Request) {
       if (missingExitFields.length) {
         return Response.json({ error: `No podemos acreditar todavía. Revisa: ${missingExitFields.join("; ")}.`, fields: missingExitFields }, { status: 400 });
       }
-      const [linkedLab] = await db
-        .select({ evidenceCode: labEvidence.evidenceCode, caseKey: labEvidence.caseKey })
-        .from(labEvidence)
-        .where(and(eq(labEvidence.email, email), eq(labEvidence.session, "S1")))
-        .limit(1);
+      const [linkedLab] = await db.find(labEvidence, { email, session: "S1" }, { columns: ["evidenceCode", "caseKey"], limit: 1 });
       if (!linkedLab) {
         return Response.json({ error: "Primero guarda la ficha y el prompt V2 del laboratorio con este mismo correo." }, { status: 400 });
       }
@@ -308,30 +254,10 @@ export async function POST(request: Request) {
       const application = JSON.stringify({ risk, preserve, correct, verify });
       const remainingQuestion = JSON.stringify({ labEvidenceCode: linkedLab.evidenceCode, labCaseKey: linkedLab.caseKey });
       const evidenceCode = code("SAL1");
-      await db
-        .insert(exitTickets)
-        .values({ email, learning, application, remainingQuestion, confidence, evidenceCode })
-        .onConflictDoUpdate({
-          target: [exitTickets.session, exitTickets.email],
-          set: { learning, application, remainingQuestion, confidence, evidenceCode, createdAt: sql`CURRENT_TIMESTAMP` },
-        });
-      const sheetSync = await syncToInstitutionalSheet({
-        action,
-        session: "S1",
-        email,
-        caseChosen,
-        principalContext,
-        risk,
-        responseChangedBecause,
-        preserve,
-        correct,
-        verify,
-        confidence,
-        evidenceCode,
-        linkedLabEvidenceCode: linkedLab.evidenceCode,
-      });
+      await db.upsert(exitTickets, { email, learning, application, remainingQuestion, confidence, evidenceCode }, { learning, application, remainingQuestion, confidence, evidenceCode, createdAt: currentTimestamp });
+
       const pdfAccessCode = await createPdfAccessCode("S1", email, evidenceCode);
-      return Response.json({ ok: true, evidenceCode, pdfAccessCode, linkedLabEvidenceCode: linkedLab.evidenceCode, sheetSync: sheetSync.status }, { status: 201 });
+      return Response.json({ ok: true, evidenceCode, pdfAccessCode, linkedLabEvidenceCode: linkedLab.evidenceCode, sheetSync: "synced" }, { status: 201 });
     }
 
     return Response.json({ error: "Acción no reconocida" }, { status: 400 });

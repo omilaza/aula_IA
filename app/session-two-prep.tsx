@@ -128,7 +128,7 @@ export function SessionTwoPrep() {
         result: "Recorrido básico con fuente, contexto, revisión y guardado completado",
         completed: true,
       });
-      const syncNote = response.sheetSync === "synced" ? " También se reflejó en el registro de nivelación." : " El avance quedó protegido en la plataforma y podrá reflejarse en la hoja institucional cuando la conexión esté disponible.";
+      const syncNote = " Guardado en la hoja institucional.";
       setEvidenceState({ kind: "success", message: `${typeof response.message === "string" ? response.message : "Preparación registrada."} Este registro no acredita la sesión principal.${syncNote}`, code: typeof response.confirmationCode === "string" ? response.confirmationCode : undefined });
     } catch (error) {
       setEvidenceState({ kind: "error", message: error instanceof Error ? error.message : "No fue posible registrar. Tu borrador permanece en este dispositivo." });

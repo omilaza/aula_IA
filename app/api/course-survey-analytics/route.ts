@@ -1,9 +1,5 @@
-import { eq } from "drizzle-orm";
 import { getDb } from "../../../db";
-import {
-  courseSatisfactionSurveyResponses,
-  courseSatisfactionSurveySync,
-} from "../../../db/schema";
+import { courseSatisfactionSurveyResponses } from "../../../db/schema";
 import {
   courseSurveyAnalyticsCsv,
   computeCourseSurveyAnalytics,
@@ -25,35 +21,26 @@ function json(data: unknown, status = 200) {
 /**
  * Exposes only non-identifiable aggregates for the institutional dashboard.
  * Names, emails, folios and open comments are deliberately absent from both
- * the SELECT and the response.
+ * the Sheets read and the response.
  */
 export async function GET(request: Request) {
   try {
     const db = getDb();
-    const rows = await db
-      .select({
-        generalRating: courseSatisfactionSurveyResponses.generalRating,
-        contentRating: courseSatisfactionSurveyResponses.contentRating,
-        instructorRating: courseSatisfactionSurveyResponses.instructorRating,
-        platformRating: courseSatisfactionSurveyResponses.platformRating,
-        activitiesRating: courseSatisfactionSurveyResponses.activitiesRating,
-        materialsRating: courseSatisfactionSurveyResponses.materialsRating,
-        materialsNotUsed: courseSatisfactionSurveyResponses.materialsNotUsed,
-        recommendationApplication:
-          courseSatisfactionSurveyResponses.recommendationApplication,
-        sheetSyncStatus: courseSatisfactionSurveySync.status,
-      })
-      .from(courseSatisfactionSurveyResponses)
-      .leftJoin(
-        courseSatisfactionSurveySync,
-        eq(
-          courseSatisfactionSurveyResponses.idempotencyKey,
-          courseSatisfactionSurveySync.idempotencyKey,
-        ),
-      );
+    const rows = await db.find(courseSatisfactionSurveyResponses, {}, {
+      columns: [
+        "generalRating",
+        "contentRating",
+        "instructorRating",
+        "platformRating",
+        "activitiesRating",
+        "materialsRating",
+        "materialsNotUsed",
+        "recommendationApplication",
+      ],
+    });
 
     const analytics = computeCourseSurveyAnalytics(
-      rows as CourseSurveyAnalyticsRow[],
+      rows.map((row) => ({ ...row, sheetSyncStatus: "synced" })) as CourseSurveyAnalyticsRow[],
     );
     if (new URL(request.url).searchParams.get("format") === "csv") {
       return new Response(courseSurveyAnalyticsCsv(analytics), {

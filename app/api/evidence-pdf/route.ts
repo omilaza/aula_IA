@@ -1,4 +1,3 @@
-import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "../../../db";
 import {
   attendance,
@@ -45,24 +44,16 @@ function participantFields(row: typeof attendance.$inferSelect | undefined, fall
 
 async function attendanceFor(email: string, session: EvidenceSession) {
   const db = getDb();
-  const [row] = await db
-    .select()
-    .from(attendance)
-    .where(and(eq(attendance.email, email), eq(attendance.session, session)))
-    .limit(1);
+  const [row] = await db.find(attendance, { email, session }, { limit: 1 });
   return row;
 }
 
 async function sessionOneDocument(email: string) {
   const db = getDb();
-  const [exit] = await db
-    .select()
-    .from(exitTickets)
-    .where(and(eq(exitTickets.email, email), eq(exitTickets.session, "S1")))
-    .limit(1);
+  const [exit] = await db.find(exitTickets, { email, session: "S1" }, { limit: 1 });
   if (!exit) return null;
   const [lab, participant] = await Promise.all([
-    db.select().from(labEvidence).where(and(eq(labEvidence.email, email), eq(labEvidence.session, "S1"))).limit(1),
+    db.find(labEvidence, { email, session: "S1" }, { limit: 1 }),
     attendanceFor(email, "S1"),
   ]);
   const evidence = lab[0];
@@ -105,16 +96,11 @@ async function sessionOneDocument(email: string) {
 
 async function sessionTwoDocument(email: string) {
   const db = getDb();
-  const [evidence] = await db
-    .select()
-    .from(sessionTwoEvidence)
-    .where(and(
-      eq(sessionTwoEvidence.email, email),
-      eq(sessionTwoEvidence.session, "S2"),
-      eq(sessionTwoEvidence.route, "principal"),
-      eq(sessionTwoEvidence.activity, "evidencia-principal"),
-    ))
-    .limit(1);
+  const [evidence] = await db.find(
+    sessionTwoEvidence,
+    { email, session: "S2", route: "principal", activity: "evidencia-principal" },
+    { limit: 1 },
+  );
   if (!evidence) return null;
   const participant = await attendanceFor(email, "S2");
   return {
@@ -155,16 +141,11 @@ async function sessionTwoDocument(email: string) {
 
 async function sessionThreeDocument(email: string) {
   const db = getDb();
-  const [evidence] = await db
-    .select()
-    .from(sessionThreeEvidence)
-    .where(and(
-      eq(sessionThreeEvidence.email, email),
-      eq(sessionThreeEvidence.session, "S3"),
-      eq(sessionThreeEvidence.route, "principal"),
-      eq(sessionThreeEvidence.activity, "evidencia-principal"),
-    ))
-    .limit(1);
+  const [evidence] = await db.find(
+    sessionThreeEvidence,
+    { email, session: "S3", route: "principal", activity: "evidencia-principal" },
+    { limit: 1 },
+  );
   if (!evidence) return null;
   const participant = await attendanceFor(email, "S3");
   return {
@@ -211,16 +192,11 @@ async function sessionThreeDocument(email: string) {
 
 async function sessionFourDocument(email: string) {
   const db = getDb();
-  const [evidence] = await db
-    .select()
-    .from(sessionFourEvidence)
-    .where(and(
-      eq(sessionFourEvidence.email, email),
-      eq(sessionFourEvidence.session, "S4"),
-      eq(sessionFourEvidence.route, "principal"),
-      eq(sessionFourEvidence.activity, "evidencia-principal"),
-    ))
-    .limit(1);
+  const [evidence] = await db.find(
+    sessionFourEvidence,
+    { email, session: "S4", route: "principal", activity: "evidencia-principal" },
+    { limit: 1 },
+  );
   if (!evidence) return null;
   const participant = await attendanceFor(email, "S4");
   return {
@@ -270,16 +246,11 @@ async function sessionFourDocument(email: string) {
 
 async function sessionFivePreparationDocument(email: string) {
   const db = getDb();
-  const [evidence] = await db
-    .select()
-    .from(levelingRecords)
-    .where(and(
-      eq(levelingRecords.email, email),
-      eq(levelingRecords.session, "S5"),
-      eq(levelingRecords.route, "preparatoria"),
-      eq(levelingRecords.activity, "nivelacion-instrumentos"),
-    ))
-    .limit(1);
+  const [evidence] = await db.find(
+    levelingRecords,
+    { email, session: "S5", route: "preparatoria", activity: "nivelacion-instrumentos" },
+    { limit: 1 },
+  );
   if (!evidence) return null;
   return {
     session: "S5P",
@@ -312,16 +283,11 @@ async function sessionFivePreparationDocument(email: string) {
 
 async function sessionFiveDocument(email: string) {
   const db = getDb();
-  const [evidence] = await db
-    .select()
-    .from(sessionFiveEvidence)
-    .where(and(
-      eq(sessionFiveEvidence.email, email),
-      eq(sessionFiveEvidence.session, "S5"),
-      eq(sessionFiveEvidence.route, "principal"),
-      eq(sessionFiveEvidence.activity, "evidencia-principal"),
-    ))
-    .limit(1);
+  const [evidence] = await db.find(
+    sessionFiveEvidence,
+    { email, session: "S5", route: "principal", activity: "evidencia-principal" },
+    { limit: 1 },
+  );
   if (!evidence) return null;
   const participant = await attendanceFor(email, "S5");
   return {
@@ -372,16 +338,11 @@ async function sessionFiveDocument(email: string) {
 
 async function sessionSixDocument(email: string) {
   const db = getDb();
-  const [evidence] = await db
-    .select()
-    .from(sessionSixEvidence)
-    .where(and(
-      eq(sessionSixEvidence.email, email),
-      eq(sessionSixEvidence.session, "S6"),
-      eq(sessionSixEvidence.activity, "evidencia-principal"),
-    ))
-    .orderBy(desc(sessionSixEvidence.updatedAt))
-    .limit(1);
+  const [evidence] = await db.find(
+    sessionSixEvidence,
+    { email, session: "S6", activity: "evidencia-principal" },
+    { orderBy: "updatedAt", descending: true, limit: 1 },
+  );
   if (!evidence) return null;
   const participant = await attendanceFor(email, "S6");
   return {

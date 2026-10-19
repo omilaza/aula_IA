@@ -548,11 +548,7 @@ export function SessionFive() {
     setEvidenceState({ kind: "loading", message: "Guardando instrumento, análisis y decisión… No cierres esta página." });
     try {
       const result = await postSessionFive({ action: "s5_evidence", ...submission });
-      const syncNote = result.sheetSync === "synced"
-        ? " También quedó reflejada en la hoja institucional."
-        : result.sheetSync === "failed"
-          ? " La evidencia quedó protegida en la plataforma; la réplica institucional requiere revisión."
-          : " La evidencia quedó protegida en la plataforma; la conexión institucional no está configurada en este entorno.";
+      const syncNote = " Guardado en la hoja institucional.";
       const warningNote = warnings.length ? ` Se guardó aunque ${warnings.length} campo${warnings.length === 1 ? "" : "s"} complementario${warnings.length === 1 ? "" : "s"} quedó${warnings.length === 1 ? "" : "aron"} vacío${warnings.length === 1 ? "" : "s"}.` : "";
       setEvidenceState({ kind: "success", message: `${typeof result.message === "string" ? result.message : "Evidencia guardada."}${warningNote}${syncNote}`, code: typeof result.confirmationCode === "string" ? result.confirmationCode : undefined, pdfAccessCode: typeof result.pdfAccessCode === "string" ? result.pdfAccessCode : undefined });
       setValidationIssues([]);

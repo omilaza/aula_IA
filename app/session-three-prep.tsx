@@ -111,8 +111,8 @@ export function SessionThreePrep() {
   });
   const [registrationState, setRegistrationState] = useState<SaveState>({ kind: "idle" });
   const [selectedCase, setSelectedCase] = useState<(typeof cases)[number]["key"]>("basica");
-  const [purpose, setPurpose] = useState(cases[0].learningPurpose);
-  const [context, setContext] = useState(cases[0].context);
+  const [purpose, setPurpose] = useState<string>(cases[0].learningPurpose);
+  const [context, setContext] = useState<string>(cases[0].context);
   const [aiDraft, setAiDraft] = useState("");
   const [sequence, setSequence] = useState("");
   const [evidence, setEvidence] = useState("");
@@ -241,11 +241,7 @@ export function SessionThreePrep() {
         result: "Mini-secuencia guiada con propósito, tres momentos, evidencia y revisión",
         completed: true,
       });
-      const syncNote = response.sheetSync === "synced"
-        ? " También se reflejó en el registro institucional de nivelación."
-        : response.sheetSync === "failed"
-          ? " El avance quedó protegido en la plataforma, pero la réplica institucional requiere revisión."
-          : " El avance quedó protegido en la plataforma; la conexión institucional no está configurada en este entorno.";
+      const syncNote = " Guardado en la hoja institucional.";
       setEvidenceState({
         kind: "success",
         message: `${typeof response.message === "string" ? response.message : "Preparación registrada."} Este registro no acredita la sesión principal.${syncNote}`,

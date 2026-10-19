@@ -63,23 +63,18 @@ test("Session 6 treats written content as complete without arbitrary minimum len
 });
 
 test("Session 6 keeps one final product when the support route changes", async () => {
-  const route = await read("../app/api/session-six/route.ts");
-  assert.match(
-    route,
-    /eq\(attendance\.email, email\), eq\(attendance\.session, SESSION\)/,
-  );
+  const [route, schemaText] = await Promise.all([
+    read("../app/api/session-six/route.ts"),
+    read("../google-apps-script/schema.json"),
+  ]);
+  const schema = JSON.parse(schemaText);
+  assert.match(route, /db\.find\(attendance, \{ email, session: SESSION \}/);
   assert.match(route, /Primero registra tu asistencia a la Sesión 6 con este mismo correo/);
-  assert.match(
-    route,
-    /target: \[\s*sessionSixEvidence\.email,\s*sessionSixEvidence\.session,\s*sessionSixEvidence\.activity,\s*\]/s,
-  );
-  assert.doesNotMatch(
-    route,
-    /target: \[[\s\S]*?sessionSixEvidence\.route[\s\S]*?\]/,
-  );
-  assert.match(route, /set: \{\s*fullName: registeredAttendance\.fullName,\s*route,/s);
-  assert.match(route, /attempt: sql`\$\{sessionSixEvidence\.attempt\} \+ 1`/);
-  assert.match(route, /responseVersion: sql`\$\{sessionSixEvidence\.responseVersion\} \+ 1`/);
+  assert.deepEqual(schema.session_six_evidence.unique, ["email", "session", "activity"]);
+  assert.match(route, /db\.find\(sessionSixEvidence, \{ email, session: SESSION, activity: MAIN_ACTIVITY \}/);
+  assert.match(route, /\},\s*\{\s*fullName: registeredAttendance\.fullName,\s*route,/s);
+  assert.match(route, /attempt: increment\(1\)/);
+  assert.match(route, /responseVersion: increment\(1\)/);
   assert.match(route, /updatedPreviousResponse: Boolean\(existing\)/);
 });
 
@@ -118,8 +113,10 @@ test("Session 6 persists every agreed product field and returns recoverable iden
   assert.match(route, /confirmationCode: code,[\s\S]*?folio: code,[\s\S]*?pdfAccessCode,/);
 });
 
-test("Session 6 backend does not write to Sheets or Apps Script", async () => {
+test("Session 6 uses the shared Sheets repository without a separate mirror or direct fetch", async () => {
   const route = await read("../app/api/session-six/route.ts");
   assert.doesNotMatch(route, /syncToInstitutionalSheet|SHEETS_WEBAPP|google-apps-script/i);
   assert.doesNotMatch(route, /fetch\(/);
+  assert.match(route, /await db\.upsert\(\s*sessionSixEvidence,/);
+  assert.match(route, /sheetSync: "synced"/);
 });

@@ -47,7 +47,7 @@ test("Session 2 backend separates orientation, leveling, attendance and evidence
   assert.match(schema, /digitalSkillDiagnostics/);
   assert.match(schema, /levelingRecords/);
   assert.match(schema, /sessionTwoEvidence/);
-  assert.match(route, /onConflictDoUpdate/);
+  assert.match(route, /db\.upsert\(/);
   assert.match(route, /attendance.*SESSION/s);
 });
 

@@ -51,8 +51,7 @@ test("central recovery uses POST, exact normalized email and read-only principal
   assert.match(portfolioRoute, /loadEvidenceDocument\(session, email\)/);
   assert.match(evidenceRoute, /primaryEvidenceSessions = \["S1", "S2", "S3", "S4", "S5"\]/);
   for (const table of ["sessionTwoEvidence", "sessionThreeEvidence", "sessionFourEvidence"]) {
-    assert.match(evidenceRoute, new RegExp(`eq\\(${table}\\.route, "principal"\\)`));
-    assert.match(evidenceRoute, new RegExp(`eq\\(${table}\\.activity, "evidencia-principal"\\)`));
+    assert.match(evidenceRoute, new RegExp(`db\\.find\\(\\s*${table},\\s*\\{[^}]+route: "principal", activity: "evidencia-principal"`));
   }
   assert.doesNotMatch(portfolioRoute, /S5P/);
   assert.doesNotMatch(portfolioRoute, /\.insert\(|\.update\(|\.delete\(|syncToInstitutionalSheet|localStorage/);
@@ -85,9 +84,9 @@ test("Session 6 individual PDF reads its latest principal product without enteri
   const end = route.indexOf("export async function loadEvidenceDocument", start);
   const block = route.slice(start, end);
   assert.ok(start >= 0 && end > start);
-  assert.match(block, /\.from\(sessionSixEvidence\)/);
-  assert.match(block, /eq\(sessionSixEvidence\.activity, "evidencia-principal"\)/);
-  assert.match(block, /orderBy\(desc\(sessionSixEvidence\.updatedAt\)\)/);
+  assert.match(block, /db\.find\(\s*sessionSixEvidence,/s);
+  assert.match(block, /activity: "evidencia-principal"/);
+  assert.match(block, /orderBy: "updatedAt", descending: true, limit: 1/);
   for (const field of [
     "projectTitle", "teachingNeed", "educationalLevel", "subject", "pedagogicalContext",
     "learningPurpose", "sourceTraceability", "prompt", "activitySequence", "assessmentEvidence",

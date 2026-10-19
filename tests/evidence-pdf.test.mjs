@@ -30,11 +30,11 @@ test("every accreditable evidence save can return a PDF credential without chang
   assert.doesNotMatch(schema, /pdfAccessCode|pdf_access_code|pdfExport/i);
 });
 
-test("PDF recovery reads the authoritative D1 record, exposes POST only and performs no writes or sheet sync", async () => {
+test("PDF recovery reads the authoritative Sheets record, exposes POST only and performs no writes or sheet sync", async () => {
   const route = await read("../app/api/evidence-pdf/route.ts");
   assert.match(route, /export async function POST/);
   assert.doesNotMatch(route, /export async function GET/);
-  assert.match(route, /\.select\(\)/);
+  assert.match(route, /db\.find\(/);
   assert.match(route, /exitTickets/);
   assert.match(route, /sessionTwoEvidence/);
   assert.match(route, /sessionThreeEvidence/);

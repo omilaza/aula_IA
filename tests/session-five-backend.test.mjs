@@ -189,7 +189,7 @@ test("Session 5 removes every obsolete configuration warning without touching dr
 test("Session 5 evidence requires principal attendance and persists every agreed field", async () => {
   const route = await read("../app/api/session-five/route.ts");
 
-  assert.match(route, /eq\(attendance\.email, email\), eq\(attendance\.session, SESSION\)/);
+  assert.match(route, /db\.find\(attendance, \{ email, session: SESSION \}/);
   assert.match(route, /if \(!mainAttendance\)/);
   for (const field of [
     "sequenceKey",
@@ -215,21 +215,21 @@ test("Session 5 evidence requires principal attendance and persists every agreed
   ]) {
     assert.match(route, new RegExp(`\\b${field}\\b`));
   }
-  assert.match(route, /\.insert\(sessionFiveEvidence\)/);
-  assert.match(route, /\.onConflictDoUpdate\(/);
-  assert.match(route, /sessionFiveEvidence\.attempt\} \+ 1/);
-  assert.match(route, /sessionFiveEvidence\.responseVersion\} \+ 1/);
+  assert.match(route, /db\.upsert\(\s*sessionFiveEvidence,/);
+  assert.match(route, /db\.upsert\(/);
+  assert.match(route, /attempt: increment\(1\)/);
+  assert.match(route, /responseVersion: increment\(1\)/);
   assert.match(route, /const prompt = clean\(payload\.prompt, 18_000\)/);
   assert.match(route, /\["Prompt del instrumento", prompt\]/);
   assert.match(route, /criteriaDescriptors,\s+prompt,\s+aiDraft,/);
   const evidenceStart = route.indexOf('action === "s5_evidence"');
-  const syncStart = route.indexOf("syncToInstitutionalSheet({", evidenceStart);
-  const syncEnd = route.indexOf("});", syncStart);
-  assert.ok(evidenceStart >= 0 && syncStart > evidenceStart && syncEnd > syncStart);
-  assert.match(route.slice(syncStart, syncEnd), /\bprompt,/);
+  const writeStart = route.indexOf("await db.upsert(", evidenceStart);
+  const writeEnd = route.indexOf("const pdfAccessCode", writeStart);
+  assert.ok(evidenceStart >= 0 && writeStart > evidenceStart && writeEnd > writeStart);
+  assert.match(route.slice(writeStart, writeEnd), /\bprompt,/);
 });
 
-test("Session 5 writes D1 before attempting each institutional replica", async () => {
+test("Session 5 confirms each record only after the primary Sheets write", async () => {
   const route = await read("../app/api/session-five/route.ts");
   const branches = [
     ["leveling_attendance", "leveling_activity"],
@@ -237,7 +237,6 @@ test("Session 5 writes D1 before attempting each institutional replica", async (
     ["s5_main_attendance", "s5_evidence"],
     ["s5_evidence", "return Response.json"],
   ];
-
   for (const [startMarker, endMarker] of branches) {
     const start = route.indexOf(`action === "${startMarker}"`);
     const end = endMarker === "return Response.json"
@@ -245,12 +244,12 @@ test("Session 5 writes D1 before attempting each institutional replica", async (
       : route.indexOf(`action === "${endMarker}"`, start + 1);
     const branch = route.slice(start, end);
     assert.ok(start >= 0 && end > start, `Missing branch ${startMarker}`);
-    assert.ok(branch.indexOf(".insert(") >= 0, `${startMarker} must write D1`);
-    assert.ok(
-      branch.indexOf(".insert(") < branch.indexOf("syncToInstitutionalSheet"),
-      `${startMarker} must persist before replication`,
-    );
+    const write = branch.indexOf("await db.upsert(");
+    const confirmation = branch.indexOf('sheetSync: "synced"');
+    assert.ok(write >= 0, `${startMarker} must write to Sheets`);
+    assert.ok(confirmation > write, `${startMarker} must await persistence before confirmation`);
   }
+  assert.doesNotMatch(route, /syncToInstitutionalSheet|drizzle-orm/);
 });
 
 test("Session 5 migration is additive and does not rewrite earlier tables", async () => {
