@@ -1,13 +1,7 @@
 import { env } from "cloudflare:workers";
-import { drizzle } from "drizzle-orm/d1";
-import * as schema from "./schema";
+import { createSheetsRepository } from "./sheets-client";
+export { currentTimestamp, increment } from "./sheets-client";
 
 export function getDb() {
-  if (!env.DB) {
-    throw new Error(
-      "Cloudflare D1 binding `DB` is unavailable. Configure the DB binding in wrangler.jsonc for your Cloudflare Worker. Sites also requires d1: DB in .openai/hosting.json."
-    );
-  }
-
-  return drizzle(env.DB, { schema });
+  return createSheetsRepository({ url: env.GOOGLE_SHEETS_WEBHOOK_URL, secret: env.GOOGLE_SHEETS_WEBHOOK_SECRET });
 }

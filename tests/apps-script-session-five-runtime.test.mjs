@@ -1,532 +1,278 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
 
-const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
+const source = await readFile(new URL("../google-apps-script/Code.gs", import.meta.url), "utf8");
+const schemaSource = await readFile(new URL("../google-apps-script/Schema.gs", import.meta.url), "utf8");
+const secret = "s5-private-storage-test-secret-at-least-32-characters";
+const plain = (value) => JSON.parse(JSON.stringify(value));
 
-const legacyHeaders = [
-  "ID_REGISTRO",
-  "FECHA_HORA",
-  "CORREO",
-  "NOMBRE_COMPLETO",
-  "PRODUCTO",
-  "PROPOSITO",
-  "CONTEXTO",
-  "FUENTES_UTILIZADAS",
-  "PROMPT_PRINCIPAL",
-  "RESULTADO",
-  "REVISION_DOCENTE",
-  "RIESGO_DETECTADO",
-  "AJUSTE_REALIZADO",
-  "ESTATUS",
-  "CODIGO_EVIDENCIA",
-  "ORIGEN",
-];
-
-const additionalHeaders = [
-  "SESION",
-  "RUTA",
-  "ACTIVIDAD",
-  "ID_PARTICIPANTE",
-  "CLAVE_SECUENCIA",
-  "TITULO_SECUENCIA",
-  "NIVEL_EDUCATIVO",
-  "ASIGNATURA",
-  "DIFICULTAD",
-  "TIPO_INSTRUMENTO",
-  "PROPOSITO_APRENDIZAJE",
-  "CONTEXTO_PEDAGOGICO",
-  "FUENTE_O_CASO",
-  "DISENO_INSTRUMENTO",
-  "CRITERIOS_Y_DESCRIPTORES",
-  "BORRADOR_IA",
-  "RESUMEN_DATOS",
-  "HALLAZGOS",
-  "COMPARACION_GRUPAL",
-  "DECISION_DOCENTE",
-  "LIMITACIONES",
-  "ADAPTACION",
-  "CHECKLIST_JSON",
-  "CRITERIOS_LOGRADOS",
-  "CRITERIOS_TOTALES",
-  "INTENTO",
-  "VERSION",
-];
-
-class MockRange {
-  constructor(sheet, row, column, rowCount = 1, columnCount = 1) {
-    this.sheet = sheet;
-    this.row = row;
-    this.column = column;
-    this.rowCount = rowCount;
-    this.columnCount = columnCount;
+// Exercise the new primary receiver with its real generated schema. Former
+// mirror-only header repair is intentionally replaced by legacy-tab isolation.
+function harness() {
+  const tabs = new Map();
+  const calls = { opened: 0, held: false, locks: 0, releases: 0, writes: [], expansions: [] };
+  function sheet(name, rows = []) {
+    const tab = {
+      rows,
+      maxColumns: 26,
+      maxRows: 1000,
+      getMaxColumns() { return this.maxColumns; },
+      getMaxRows() { return this.maxRows; },
+      insertColumnsAfter(after, count) {
+        assert.equal(calls.held, true);
+        assert.equal(after, this.maxColumns);
+        this.maxColumns += count;
+        calls.expansions.push({ name, after, count });
+      },
+      insertRowsAfter(after, count) {
+        assert.equal(calls.held, true);
+        assert.equal(after, this.maxRows);
+        this.maxRows += count;
+      },
+      getLastRow() {
+        let length = this.rows.length;
+        while (length && this.rows[length - 1].every((cell) => cell === "")) length--;
+        return length;
+      },
+      getLastColumn() {
+        return Math.max(0, ...this.rows.map((row) => {
+          let length = row.length;
+          while (length && row[length - 1] === "") length--;
+          return length;
+        }));
+      },
+      getRange(row, column, rowCount, columnCount) {
+        assert.equal(calls.held, true, "Read operations must hold the script lock");
+        assert.ok(column + columnCount - 1 <= this.maxColumns);
+        return { getValues: () => Array.from({ length: rowCount }, (_, offset) =>
+          Array.from({ length: columnCount }, (_, cell) => this.rows[row - 1 + offset]?.[column - 1 + cell] ?? "")) };
+      },
+    };
+    tabs.set(name, tab);
+    return tab;
   }
-
-  getValues() {
-    return Array.from({ length: this.rowCount }, (_, rowOffset) =>
-      Array.from({ length: this.columnCount }, (_, columnOffset) =>
-        this.sheet.valueAt(this.row + rowOffset, this.column + columnOffset),
-      ),
-    );
-  }
-
-  getFormulas() {
-    return Array.from({ length: this.rowCount }, (_, rowOffset) =>
-      Array.from({ length: this.columnCount }, (_, columnOffset) =>
-        this.sheet.formulaAt(this.row + rowOffset, this.column + columnOffset),
-      ),
-    );
-  }
-
-  getValue() {
-    return this.getValues()[0][0];
-  }
-
-  setValues(values) {
-    assert.equal(values.length, this.rowCount);
-    for (let rowOffset = 0; rowOffset < this.rowCount; rowOffset += 1) {
-      assert.equal(values[rowOffset].length, this.columnCount);
-      for (let columnOffset = 0; columnOffset < this.columnCount; columnOffset += 1) {
-        this.sheet.assertValidValue(
-          this.row + rowOffset,
-          this.column + columnOffset,
-          values[rowOffset][columnOffset],
-        );
-        this.sheet.setValueAt(
-          this.row + rowOffset,
-          this.column + columnOffset,
-          values[rowOffset][columnOffset],
-        );
-      }
-    }
-    this.sheet.mutations.push({ type: "setValues", row: this.row, column: this.column, rowCount: this.rowCount, columnCount: this.columnCount });
-    return this;
-  }
-
-  setValue(value) {
-    this.sheet.setValueAt(this.row, this.column, value);
-    this.sheet.mutations.push({ type: "setValue", row: this.row, column: this.column });
-    return this;
-  }
-
-  setFontWeight() {
-    return this;
-  }
-
-  clearDataValidations() {
-    this.sheet.clearValidations(
-      this.row,
-      this.column,
-      this.rowCount,
-      this.columnCount,
-    );
-    this.sheet.mutations.push({
-      type: "clearDataValidations",
-      row: this.row,
-      column: this.column,
-      rowCount: this.rowCount,
-      columnCount: this.columnCount,
-    });
-    return this;
-  }
-}
-
-class MockSheet {
-  constructor(name, headers = []) {
-    this.name = name;
-    this.rows = headers.length ? [headers.slice()] : [];
-    this.formulas = [];
-    this.validations = new Map();
-    this.maxColumns = Math.max(26, headers.length);
-    this.maxRows = 100;
-    this.frozenRows = 0;
-    this.mutations = [];
-  }
-
-  validationKey(row, column) {
-    return `${row}:${column}`;
-  }
-
-  setValidationAt(row, column, allowedValues) {
-    this.validations.set(
-      this.validationKey(row, column),
-      new Set(allowedValues),
-    );
-  }
-
-  validationAt(row, column) {
-    return this.validations.get(this.validationKey(row, column)) || null;
-  }
-
-  assertValidValue(row, column, value) {
-    const validation = this.validationAt(row, column);
-    if (validation && !validation.has(value)) {
-      throw new Error(`Strict validation rejected ${String(value)} at ${row}:${column}`);
-    }
-  }
-
-  clearValidations(row, column, rowCount, columnCount) {
-    for (let rowOffset = 0; rowOffset < rowCount; rowOffset += 1) {
-      for (let columnOffset = 0; columnOffset < columnCount; columnOffset += 1) {
-        this.validations.delete(
-          this.validationKey(row + rowOffset, column + columnOffset),
-        );
-      }
-    }
-  }
-
-  valueAt(row, column) {
-    return this.rows[row - 1]?.[column - 1] ?? "";
-  }
-
-  formulaAt(row, column) {
-    return this.formulas[row - 1]?.[column - 1] ?? "";
-  }
-
-  setValueAt(row, column, value) {
-    while (this.rows.length < row) this.rows.push([]);
-    while (this.rows[row - 1].length < column) this.rows[row - 1].push("");
-    this.rows[row - 1][column - 1] = value;
-    this.maxColumns = Math.max(this.maxColumns, column);
-  }
-
-  setFormulaAt(row, column, formula) {
-    while (this.formulas.length < row) this.formulas.push([]);
-    while (this.formulas[row - 1].length < column) this.formulas[row - 1].push("");
-    this.formulas[row - 1][column - 1] = formula;
-    this.maxColumns = Math.max(this.maxColumns, column);
-  }
-
-  getRange(row, column, rowCount = 1, columnCount = 1) {
-    return new MockRange(this, row, column, rowCount, columnCount);
-  }
-
-  getLastRow() {
-    const last = Math.max(this.rows.length, this.formulas.length);
-    for (let row = last; row > 0; row -= 1) {
-      const values = this.rows[row - 1] || [];
-      const formulas = this.formulas[row - 1] || [];
-      if (values.some((value) => value !== "") || formulas.some((value) => value !== "")) return row;
-    }
-    return 0;
-  }
-
-  getLastColumn() {
-    return Math.max(
-      1,
-      ...this.rows.map((row) => row.length),
-      ...this.formulas.map((row) => row.length),
-    );
-  }
-
-  getMaxColumns() {
-    return this.maxColumns;
-  }
-
-  getMaxRows() {
-    return this.maxRows;
-  }
-
-  insertColumnsAfter(after, count) {
-    const inheritedValidations = [];
-    for (let row = 1; row <= this.maxRows; row += 1) {
-      const validation = this.validationAt(row, after);
-      if (validation) inheritedValidations.push([row, [...validation]]);
-    }
-    this.maxColumns += count;
-    for (const [row, allowedValues] of inheritedValidations) {
-      for (let column = after + 1; column <= after + count; column += 1) {
-        this.setValidationAt(row, column, allowedValues);
-      }
-    }
-    this.mutations.push({ type: "insertColumnsAfter", count });
-  }
-
-  setFrozenRows(count) {
-    this.frozenRows = count;
-  }
-}
-
-class MockSpreadsheet {
-  constructor(s5Headers = legacyHeaders) {
-    this.accesses = [];
-    this.insertions = [];
-    this.sheets = new Map([
-      ["PARTICIPANTES", new MockSheet("PARTICIPANTES", Array.from({ length: 8 }, (_, index) => `P${index + 1}`))],
-      ["ASISTENCIA", new MockSheet("ASISTENCIA", Array.from({ length: 12 }, (_, index) => `A${index + 1}`))],
-      ["NIVELACION", new MockSheet("NIVELACION", Array.from({ length: 18 }, (_, index) => `N${index + 1}`))],
-      ["S4_EVIDENCIAS", new MockSheet("S4_EVIDENCIAS", ["SENTINELA_S4"])],
-      ["S5_EVIDENCIAS", new MockSheet("S5_EVIDENCIAS", s5Headers)],
-    ]);
-  }
-
-  getSheetByName(name) {
-    this.accesses.push(name);
-    return this.sheets.get(name) || null;
-  }
-
-  insertSheet(name) {
-    this.insertions.push(name);
-    const sheet = new MockSheet(name);
-    this.sheets.set(name, sheet);
-    return sheet;
-  }
-}
-
-function payload(confirmationCode = "EV5-TEST-V1") {
-  return {
-    action: "s5_evidence",
-    session: "S5",
-    route: "principal",
-    activity: "evidencia-principal",
-    participantId: "PAR-S5-TEST",
-    fullName: "Docente de prueba S5",
-    email: "prueba.controlada.s5@example.invalid",
-    product: "Instrumento y análisis S5",
-    purpose: "Analizar evidencia agregada sin identificar estudiantes.",
-    context: "Grupo hipotético y datos sintéticos para una práctica controlada.",
-    sources: "Caso simulado AULA-IA",
-    prompt: "Diseña un instrumento alineado y marca todo supuesto como propuesta.",
-    result: "Borrador inicial del instrumento y de su lectura agregada.",
-    teacherReview: "La persona docente contrasta los hallazgos y conserva la decisión final.",
-    detectedRisk: "La muestra sintética no permite generalizar resultados.",
-    adjustment: "Se agregó una limitación y una alternativa accesible.",
-    status: "Recibida",
-    confirmationCode,
-    sequenceKey: "secuencia-s5-prueba",
-    sequenceTitle: "Evaluación formativa con datos agregados",
-    educationalLevel: "Media superior",
-    subject: "Ciencias sociales",
-    difficultyLevel: "intermedio",
-    instrumentType: "Lista de cotejo",
-    learningPurpose: "Interpretar evidencia agregada para decidir un siguiente paso docente.",
-    pedagogicalContext: "Grupo hipotético de práctica sin datos personales.",
-    sourceCase: "Caso sintético integrado en AULA-IA.",
-    instrumentDesign: "Cinco criterios observables con opciones cumple, en proceso y requiere apoyo.",
-    criteriaDescriptors: "Cada criterio describe una conducta observable y evita etiquetas personales.",
-    aiDraft: "Borrador generado para revisión; no constituye una valoración definitiva.",
-    datasetSummary: "12 respuestas sintéticas agregadas en tres categorías.",
-    findings: "La categoría de argumentación requiere un apoyo adicional.",
-    groupComparison: "Se comparan tendencias agregadas, no personas ni grupos reales.",
-    teacherDecision: "Realizar una práctica guiada y volver a observar el mismo criterio.",
-    limitations: "Datos sintéticos, muestra pequeña y ausencia de aplicación real.",
-    adaptation: "Versión legible en móvil y alternativa oral sin IA.",
-    checklistJson: { alineacion: true, privacidad: true, decision_docente: true },
-    checklistAchieved: 3,
-    checklistTotal: 3,
+  const spreadsheet = {
+    getSheetByName: (name) => tabs.get(name) || null,
+    insertSheet: (name) => {
+      assert.equal(calls.held, true);
+      assert.match(name, /^APP_/);
+      assert.equal(tabs.has(name), false);
+      return sheet(name);
+    },
   };
-}
-
-async function harness(spreadsheet = new MockSpreadsheet()) {
-  const script = await read("../google-apps-script/Code.gs");
-  const secret = script.match(/const WEBHOOK_SECRET = '([^']+)'/)?.[1];
-  assert.ok(secret);
-  let uuid = 0;
-  let acquired = 0;
-  let released = 0;
-  const context = {
+  const context = vm.createContext({
+    PropertiesService: { getScriptProperties: () => ({ getProperty: (key) =>
+      ({ SPREADSHEET_ID: "private-test-sheet", AULA_STORAGE_SECRET: secret })[key] ?? null }) },
+    SpreadsheetApp: {
+      openById: (id) => {
+        assert.equal(id, "private-test-sheet");
+        assert.equal(calls.held, true);
+        calls.opened++;
+        return spreadsheet;
+      },
+      flush() {},
+    },
+    LockService: { getScriptLock: () => ({
+      tryLock(milliseconds) {
+        assert.equal(milliseconds, 20000);
+        assert.equal(calls.held, false);
+        calls.held = true;
+        calls.locks++;
+        return true;
+      },
+      releaseLock() {
+        assert.equal(calls.held, true);
+        calls.held = false;
+        calls.releases++;
+      },
+    }) },
+    Sheets: { Spreadsheets: { Values: { update(resource, id, range, options) {
+      assert.equal(calls.held, true, "Writes must hold the script lock");
+      assert.equal(id, "private-test-sheet");
+      assert.equal(options.valueInputOption, "RAW");
+      const match = range.match(/^'([^']+)'!A(\d+):([A-Z]+)(\d+)$/);
+      assert.ok(match, `Invalid RAW range: ${range}`);
+      assert.equal(match[2], match[4]);
+      const target = tabs.get(match[1]);
+      assert.ok(target);
+      const width = Array.from(match[3]).reduce((count, letter) => count * 26 + letter.charCodeAt(0) - 64, 0);
+      assert.equal(width, resource.values[0].length, "A1 end-column must include every value");
+      assert.ok(width <= target.maxColumns, "Expand the grid before writing columns beyond Z");
+      assert.ok(Number(match[2]) <= target.maxRows);
+      target.rows[Number(match[2]) - 1] = Array.from(resource.values[0]);
+      calls.writes.push({ tab: match[1], range, values: Array.from(resource.values[0]) });
+      return { updatedRows: 1 };
+    } } } },
     ContentService: {
       MimeType: { JSON: "application/json" },
-      createTextOutput(text) {
-        return { text, setMimeType() { return this; } };
-      },
+      createTextOutput: (text) => ({ text, setMimeType() { return this; } }),
     },
-    LockService: {
-      getScriptLock() {
-        return {
-          tryLock(milliseconds) {
-            assert.equal(milliseconds, 30000);
-            acquired += 1;
-            return true;
-          },
-          releaseLock() { released += 1; },
-        };
-      },
-    },
-    SpreadsheetApp: { openById: () => spreadsheet, flush() {} },
-    Utilities: { getUuid: () => `00000000-0000-0000-0000-${String(++uuid).padStart(12, "0")}` },
-  };
-  vm.createContext(context);
-  vm.runInContext(script, context);
+  });
+  vm.runInContext(schemaSource, context);
+  vm.runInContext(source, context);
+  const schema = plain(context.AULA_SCHEMA);
+  function post(payload = {}) {
+    const request = { action: "storage", version: 1, secret, requestId: randomUUID(), ...payload };
+    return JSON.parse(context.doPost({ postData: { contents: JSON.stringify(request) } }).text);
+  }
+  return { context, calls, tabs, sheet, schema, post, setup: () => plain(context.setupStorage()) };
+}
+
+function evidence(confirmationCode = "EV5-TEST-V1") {
   return {
-    spreadsheet,
-    post(body) {
-      const output = context.doPost({ postData: { contents: JSON.stringify({ ...body, secret }) } });
-      return JSON.parse(output.text);
-    },
-    locks() { return { acquired, released }; },
+    participantId: "PAR-S5-TEST", fullName: "Docente sintético", email: "s5@example.test",
+    session: "S5", route: "principal", activity: "evidencia-principal",
+    sequenceKey: "secuencia-s5-prueba", sequenceTitle: "Evaluación con evidencia agregada",
+    educationalLevel: "Educación media superior", subject: "Ciencias sociales",
+    difficultyLevel: "intermedio", instrumentType: "lista_cotejo",
+    learningPurpose: "Interpretar evidencia para decidir un siguiente paso docente.",
+    pedagogicalContext: "Grupo hipotético sin información personal.", sourceCase: "Caso sintético AULA-IA.",
+    instrumentDesign: "Criterios observables con opciones de seguimiento.",
+    criteriaDescriptors: "Descriptores de conductas observables sin etiquetas personales.",
+    prompt: "Diseña un instrumento y marca cada supuesto como propuesta.",
+    aiDraft: "Borrador que necesita revisión docente.", datasetSummary: "Doce respuestas sintéticas.",
+    findings: "La argumentación requiere apoyo.", groupComparison: "Comparación agregada de G1, G2 y G3.",
+    teacherDecision: "Realizar una práctica guiada y observar de nuevo.",
+    limitations: "La muestra sintética no permite generalizar.", adaptation: "Alternativa oral accesible.",
+    checklistJson: JSON.stringify({ alineacion: true, privacidad: true }), confirmationCode,
   };
 }
 
-test("S5 expands only S5_EVIDENCIAS, preserves A:P and updates one idempotent row", async () => {
-  const { spreadsheet, post, locks } = await harness();
-  const s5 = spreadsheet.sheets.get("S5_EVIDENCIAS");
-  const s4Before = structuredClone(spreadsheet.sheets.get("S4_EVIDENCIAS").rows);
-  const participantsBefore = structuredClone(spreadsheet.sheets.get("PARTICIPANTES").rows);
-  const attendanceBefore = structuredClone(spreadsheet.sheets.get("ASISTENCIA").rows);
-  const levelingBefore = structuredClone(spreadsheet.sheets.get("NIVELACION").rows);
+const saveS5 = (values, extra = {}) => ({ operation: "upsert", table: "session_five_evidence", values, ...extra });
 
-  assert.equal(post(payload()).ok, true);
-  assert.deepEqual(s5.rows[0].slice(0, 16), legacyHeaders);
-  assert.deepEqual(s5.rows[0].slice(16, 43), additionalHeaders);
-  assert.equal(s5.getLastRow(), 2);
-  assert.match(s5.valueAt(2, 1), /^S5E-/);
-  assert.equal(s5.valueAt(2, 3), "prueba.controlada.s5@example.invalid");
-  assert.equal(s5.valueAt(2, 17), "S5");
-  assert.equal(s5.valueAt(2, 21), "secuencia-s5-prueba");
-  assert.equal(s5.valueAt(2, 26), "Lista de cotejo");
-  assert.equal(s5.valueAt(2, 39), JSON.stringify(payload().checklistJson));
-  assert.equal(s5.valueAt(2, 42), 1);
-  assert.equal(s5.valueAt(2, 43), 1);
-  const originalId = s5.valueAt(2, 1);
-
-  assert.equal(post(payload()).ok, true);
-  assert.equal(s5.getLastRow(), 2);
-  assert.equal(s5.valueAt(2, 42), 1);
-  assert.equal(s5.valueAt(2, 43), 1);
-
-  const revised = payload("EV5-TEST-V2");
-  revised.findings = "La versión dos documenta un hallazgo revisado.";
-  assert.equal(post(revised).ok, true);
-  assert.equal(s5.getLastRow(), 2);
-  assert.equal(s5.valueAt(2, 1), originalId);
-  assert.equal(s5.valueAt(2, 15), "EV5-TEST-V2");
-  assert.equal(s5.valueAt(2, 34), revised.findings);
-  assert.equal(s5.valueAt(2, 42), 2);
-  assert.equal(s5.valueAt(2, 43), 2);
-
-  assert.deepEqual(spreadsheet.sheets.get("S4_EVIDENCIAS").rows, s4Before);
-  assert.deepEqual(spreadsheet.sheets.get("PARTICIPANTES").rows, participantsBefore);
-  assert.deepEqual(spreadsheet.sheets.get("ASISTENCIA").rows, attendanceBefore);
-  assert.deepEqual(spreadsheet.sheets.get("NIVELACION").rows, levelingBefore);
-  assert.deepEqual(spreadsheet.insertions, []);
-  assert.deepEqual([...new Set(spreadsheet.accesses)], ["S5_EVIDENCIAS"]);
-  assert.deepEqual(locks(), { acquired: 3, released: 3 });
+test("S5 setup expands its primary tab beyond Z and preserves every legacy sheet", () => {
+  const h = harness();
+  const legacy = ["PARTICIPANTES", "ASISTENCIA", "NIVELACION", "S4_EVIDENCIAS", "S5_EVIDENCIAS"];
+  for (const name of legacy) h.sheet(name, [["ENCABEZADO_LEGADO"], [`Registro ${name}`, "=ROW()"]]);
+  const before = Object.fromEntries(legacy.map((name) => [name, structuredClone(h.tabs.get(name).rows)]));
+  assert.equal(h.setup().ok, true);
+  const definition = h.schema.session_five_evidence;
+  const tab = h.tabs.get(definition.tab);
+  assert.ok(definition.columns.length + 1 > 26);
+  assert.deepEqual(tab.rows[0], [...definition.columns, "_requestId"]);
+  assert.equal(tab.maxColumns, definition.columns.length + 1);
+  assert.ok(h.calls.expansions.some(({ name, after }) => name === definition.tab && after === 26));
+  for (const name of legacy) assert.deepEqual(h.tabs.get(name).rows, before[name]);
+  assert.ok(h.calls.writes.every(({ tab: name }) => name.startsWith("APP_")));
+  const writes = h.calls.writes.length;
+  h.setup();
+  assert.equal(h.calls.writes.length, writes, "A second setup must preserve existing headers");
 });
 
-test("S5 clears only validations inherited from ORIGEN in Q:AQ before writing", async () => {
-  const spreadsheet = new MockSpreadsheet();
-  const s5 = spreadsheet.sheets.get("S5_EVIDENCIAS");
-  s5.maxColumns = 16;
-  for (let row = 2; row <= s5.getMaxRows(); row += 1) {
-    s5.setValidationAt(row, 16, ["Página"]);
-  }
-
-  const { post } = await harness(spreadsheet);
-  assert.equal(post(payload()).ok, true);
-  assert.equal(s5.getLastRow(), 2);
-  assert.equal(s5.valueAt(2, 16), "Página");
-  assert.equal(s5.valueAt(2, 17), "S5");
-  assert.ok(s5.validationAt(2, 16)?.has("Página"));
-  for (let column = 17; column <= 43; column += 1) {
-    assert.equal(s5.validationAt(2, column), null);
-  }
-  assert.deepEqual(
-    s5.mutations.filter(({ type }) => type === "clearDataValidations"),
-    [{
-      type: "clearDataValidations",
-      row: 1,
-      column: 17,
-      rowCount: s5.getMaxRows(),
-      columnCount: 27,
-    }],
-  );
-});
-
-test("S5 repairs inherited validations when AQ already exists without changing partial rows", async () => {
-  const spreadsheet = new MockSpreadsheet([...legacyHeaders, ...additionalHeaders]);
-  const s5 = spreadsheet.sheets.get("S5_EVIDENCIAS");
-  const partialRows = Array.from({ length: 3 }, (_, index) => {
-    const row = Array(16).fill("");
-    row[0] = `S5E-PARTIAL-${index + 1}`;
-    row[1] = `2026-08-11T10:0${index}:00.000Z`;
-    row[2] = "prueba.controlada.s5@example.invalid";
-    row[3] = "Docente de prueba S5";
-    row[14] = "EV5-TEST-V1";
-    row[15] = "Página";
-    return row;
-  });
-  for (const row of partialRows) s5.rows.push(row.slice());
-  for (let row = 2; row <= s5.getMaxRows(); row += 1) {
-    s5.setValidationAt(row, 16, ["Página"]);
-    for (let column = 17; column <= 43; column += 1) {
-      s5.setValidationAt(row, column, ["Página"]);
-    }
-  }
-  const partialRowsBefore = structuredClone(s5.rows.slice(1, 4));
-
-  const { post } = await harness(spreadsheet);
-  assert.equal(post(payload()).ok, true);
-  assert.deepEqual(s5.rows.slice(1, 4), partialRowsBefore);
-  assert.equal(s5.getLastRow(), 5);
-  assert.equal(s5.valueAt(5, 16), "Página");
-  assert.equal(s5.valueAt(5, 17), "S5");
-  assert.ok(s5.validationAt(5, 16)?.has("Página"));
-  for (let column = 17; column <= 43; column += 1) {
-    assert.equal(s5.validationAt(5, column), null);
-  }
-  assert.deepEqual(
-    s5.mutations.filter(({ type }) => type === "clearDataValidations"),
-    [{
-      type: "clearDataValidations",
-      row: 1,
-      column: 17,
-      rowCount: s5.getMaxRows(),
-      columnCount: 27,
-    }],
-  );
-});
-
-test("S5 rejects invalid control data before expanding the legacy sheet", async () => {
-  const { spreadsheet, post, locks } = await harness();
-  const s5 = spreadsheet.sheets.get("S5_EVIDENCIAS");
-  const invalid = payload();
-  delete invalid.confirmationCode;
-
-  assert.equal(post(invalid).ok, false);
-  assert.deepEqual(s5.rows, [legacyHeaders]);
-  assert.deepEqual(s5.mutations, []);
-  assert.deepEqual(spreadsheet.accesses, []);
-  assert.deepEqual(locks(), { acquired: 1, released: 1 });
-});
-
-test("S5 stops on a changed legacy header or a formula in the append-only area", async () => {
-  const changedPrefix = legacyHeaders.slice();
-  changedPrefix[4] = "PRODUCTO_CAMBIADO";
-  const changedHarness = await harness(new MockSpreadsheet(changedPrefix));
-  const changedSheet = changedHarness.spreadsheet.sheets.get("S5_EVIDENCIAS");
-  assert.equal(changedHarness.post(payload()).ok, false);
-  assert.deepEqual(changedSheet.mutations, []);
-  assert.equal(changedSheet.getLastRow(), 1);
-
-  const formulaHarness = await harness();
-  const formulaSheet = formulaHarness.spreadsheet.sheets.get("S5_EVIDENCIAS");
-  formulaSheet.setFormulaAt(2, 17, "=ROW()", "");
-  assert.equal(formulaHarness.post(payload()).ok, false);
-  assert.deepEqual(formulaSheet.rows, [legacyHeaders]);
-  assert.deepEqual(formulaSheet.mutations, []);
-  assert.equal(formulaSheet.formulaAt(2, 17), "=ROW()");
-});
-
-test("S5 main attendance reuses only participant and attendance contracts", async () => {
-  const { spreadsheet, post } = await harness();
-  const s5Before = structuredClone(spreadsheet.sheets.get("S5_EVIDENCIAS").rows);
-  const response = post({
-    action: "s5_main_attendance",
-    session: "S5",
-    email: "asistencia.s5@example.invalid",
-    fullName: "Asistencia sintética S5",
-    institution: "Institución de prueba",
-    role: "Docente",
-    consent: true,
-    confirmationCode: "AS5-TEST-V1",
-  });
-
+test("S5 primary write retains every evidence field and leaves earlier course tabs unchanged", () => {
+  const h = harness(); h.setup();
+  const definition = h.schema.session_five_evidence;
+  const prior = new Map([...h.tabs].filter(([name]) => name !== definition.tab).map(([name, tab]) => [name, structuredClone(tab.rows)]));
+  const values = evidence();
+  values.prompt = '=HYPERLINK("https://example.test", "texto literal")';
+  const response = h.post(saveS5(values));
   assert.equal(response.ok, true);
-  assert.equal(spreadsheet.sheets.get("PARTICIPANTES").getLastRow(), 2);
-  assert.equal(spreadsheet.sheets.get("ASISTENCIA").getLastRow(), 2);
-  assert.equal(spreadsheet.sheets.get("ASISTENCIA").valueAt(2, 3), "S5");
-  assert.deepEqual(spreadsheet.sheets.get("S5_EVIDENCIAS").rows, s5Before);
-  assert.deepEqual([...new Set(spreadsheet.accesses)], ["PARTICIPANTES", "ASISTENCIA"]);
+  for (const [field, value] of Object.entries(values)) assert.equal(response.result[field], value, field);
+  assert.equal(response.result.attempt, 1);
+  assert.equal(response.result.responseVersion, 1);
+  const tab = h.tabs.get(definition.tab);
+  assert.equal(tab.rows.length, 2);
+  for (const [field, value] of Object.entries(values)) assert.equal(tab.rows[1][definition.columns.indexOf(field)], value, field);
+  assert.match(h.calls.writes.at(-1).range, /!A2:AH2$/);
+  for (const [name, rows] of prior) assert.deepEqual(h.tabs.get(name).rows, rows, name);
+  assert.equal(h.calls.locks, h.calls.releases);
+});
+
+test("S5 retries are idempotent and a new folio updates one row with one version increment", () => {
+  const h = harness(); h.setup();
+  const initial = saveS5(evidence(), { requestId: randomUUID() });
+  const first = h.post(initial);
+  assert.equal(first.ok, true);
+  const afterFirst = h.calls.writes.length;
+  assert.deepEqual(h.post(initial).result, first.result);
+  assert.equal(h.calls.writes.length, afterFirst);
+  const revised = evidence("EV5-TEST-V2");
+  revised.teacherDecision = "Decisión revisada y nuevo seguimiento.";
+  const update = saveS5(revised, {
+    requestId: randomUUID(),
+    updates: {
+      teacherDecision: revised.teacherDecision, confirmationCode: revised.confirmationCode,
+      attempt: { op: "increment", value: 1 }, responseVersion: { op: "increment", value: 1 },
+      updatedAt: { op: "timestamp" },
+    },
+  });
+  const next = h.post(update);
+  assert.equal(next.ok, true);
+  assert.equal(next.result.id, first.result.id);
+  assert.equal(next.result.participantId, first.result.participantId);
+  assert.equal(next.result.createdAt, first.result.createdAt);
+  assert.equal(next.result.confirmationCode, "EV5-TEST-V2");
+  assert.equal(next.result.teacherDecision, revised.teacherDecision);
+  assert.equal(next.result.attempt, 2);
+  assert.equal(next.result.responseVersion, 2);
+  const afterUpdate = h.calls.writes.length;
+  assert.deepEqual(h.post(update).result, next.result);
+  assert.equal(h.calls.writes.length, afterUpdate);
+  assert.equal(h.post(initial).error.code, "RETRY_REPLACED");
+  assert.equal(h.calls.writes.length, afterUpdate);
+  assert.equal(h.tabs.get(h.schema.session_five_evidence.tab).rows.length, 2);
+  assert.equal(h.calls.locks, h.calls.releases);
+});
+
+test("S5 attendance remains distinct from S1–S4 for the same participant", () => {
+  const h = harness(); h.setup();
+  const evidenceBefore = structuredClone(h.tabs.get(h.schema.session_five_evidence.tab).rows);
+  for (const session of ["S1", "S2", "S3", "S4", "S5"]) {
+    const values = {
+      email: "same-teacher@example.test", fullName: "Docente sintético", institution: "Plantel",
+      role: "Docente", consent: true, session, confirmationCode: `AS-${session}`,
+    };
+    assert.equal(h.post({ operation: "upsert", table: "attendance", values }).ok, true);
+  }
+  for (const session of ["S1", "S2", "S3", "S4", "S5"]) {
+    const result = h.post({ operation: "find", table: "attendance", filters: { email: "same-teacher@example.test", session }, options: { columns: ["session", "confirmationCode"] } });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.result, [{ session, confirmationCode: `AS-${session}` }]);
+  }
+  assert.equal(h.tabs.get(h.schema.attendance.tab).rows.length, 6);
+  assert.deepEqual(h.tabs.get(h.schema.session_five_evidence.tab).rows, evidenceBefore);
+});
+
+test("S5 rejects public access, legacy actions and invalid records without persisting them", () => {
+  const h = harness();
+  const denied = h.post(saveS5(evidence(), { secret: "incorrect" }));
+  assert.equal(denied.error.code, "UNAUTHORIZED");
+  assert.equal(JSON.parse(h.context.doGet().text).error.code, "METHOD_NOT_ALLOWED");
+  assert.equal(h.post({ action: "s5_evidence", ...evidence() }).error.code, "INVALID_REQUEST");
+  assert.equal(h.post({ operation: "find", table: "S5_EVIDENCIAS" }).error.code, "INVALID_REQUEST");
+  assert.equal(h.calls.opened, 0);
+  assert.equal(h.calls.writes.length, 0);
+  h.setup();
+  const writes = h.calls.writes.length;
+  const missingFolio = evidence();
+  delete missingFolio.confirmationCode;
+  const invalid = h.post(saveS5(missingFolio));
+  assert.equal(invalid.error.code, "INVALID_REQUEST");
+  assert.doesNotMatch(JSON.stringify(invalid), /s5@example|private-test-sheet|storage-test-secret/);
+  assert.equal(h.post(saveS5({ ...evidence(), unknownField: "unapproved" })).error.code, "INVALID_REQUEST");
+  assert.equal(h.calls.writes.length, writes);
+  assert.equal(h.tabs.get(h.schema.session_five_evidence.tab).rows.length, 1);
+  assert.equal(h.calls.locks, h.calls.releases);
+});
+
+test("S5 refuses altered primary headers and never repairs or overwrites legacy content", () => {
+  const h = harness();
+  const legacy = [["ID_REGISTRO", "OTRA_COLUMNA"], ["LEGACY-S5", "=ROW()"]];
+  h.sheet("S5_EVIDENCIAS", structuredClone(legacy));
+  h.setup();
+  const primary = h.tabs.get(h.schema.session_five_evidence.tab);
+  primary.rows[0][0] = "unexpected_header";
+  const before = structuredClone(primary.rows);
+  const writes = h.calls.writes.length;
+  const response = h.post(saveS5(evidence()));
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, "HEADER_MISMATCH");
+  assert.deepEqual(primary.rows, before);
+  assert.deepEqual(h.tabs.get("S5_EVIDENCIAS").rows, legacy);
+  assert.equal(h.calls.writes.length, writes);
+  assert.equal(h.calls.held, false);
+  assert.equal(h.calls.locks, h.calls.releases);
 });

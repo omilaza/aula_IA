@@ -3,12 +3,7 @@
   "name": "aula-ia",
   "main": "./worker/index.ts",
   "compatibility_date": "2026-07-02",
-  "compatibility_flags": ["nodejs_compat"],
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "aula-ia-db",
-      "migrations_dir": "drizzle"
-    }
+  "compatibility_flags": [
+    "nodejs_compat"
   ]
 }

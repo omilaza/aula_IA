@@ -1,8 +1,7 @@
-import { and, eq, sql } from "drizzle-orm";
-import { getDb } from "../../../db";
+import { getDb, increment, currentTimestamp } from "../../../db";
 import { attendance, levelingRecords, sessionFourEvidence } from "../../../db/schema";
 import { cases, difficultyEvidenceChecklist } from "../../session-four-data";
-import { syncToInstitutionalSheet } from "../../sheets-sync";
+
 import { createPdfAccessCode } from "../../evidence-pdf-server";
 
 const SESSION = "S4";
@@ -75,11 +74,7 @@ function routeError(error: unknown) {
 
 async function participantIdFor(email: string) {
   const db = getDb();
-  const [leveling] = await db
-    .select({ participantId: levelingRecords.participantId })
-    .from(levelingRecords)
-    .where(and(eq(levelingRecords.email, email), eq(levelingRecords.session, SESSION)))
-    .limit(1);
+  const [leveling] = await db.find(levelingRecords, { email, session: SESSION }, { columns: ["participantId"], limit: 1 });
   return leveling?.participantId || confirmationCode("PAR");
 }
 
@@ -120,23 +115,14 @@ export async function POST(request: Request) {
         );
       }
 
-      const [existing] = await db
-        .select({ participantId: levelingRecords.participantId })
-        .from(levelingRecords)
-        .where(and(
-          eq(levelingRecords.email, email),
-          eq(levelingRecords.session, SESSION),
-          eq(levelingRecords.route, PREPARATORY_ROUTE),
-          eq(levelingRecords.activity, LEVELING_ATTENDANCE_ACTIVITY),
-        ))
-        .limit(1);
+      const [existing] = await db.find(levelingRecords, { email, session: SESSION, route: PREPARATORY_ROUTE, activity: LEVELING_ATTENDANCE_ACTIVITY }, { columns: ["participantId"], limit: 1 });
       const participantId = existing?.participantId || (await participantIdFor(email));
       const code = confirmationCode("NP4");
       const responseJson = JSON.stringify({ consent: true });
 
-      await db
-        .insert(levelingRecords)
-        .values({
+      await db.upsert(
+        levelingRecords,
+        {
           participantId,
           fullName,
           email,
@@ -150,46 +136,28 @@ export async function POST(request: Request) {
           result: "Entrada registrada",
           status: "completado",
           confirmationCode: code,
-        })
-        .onConflictDoUpdate({
-          target: [levelingRecords.email, levelingRecords.session, levelingRecords.route, levelingRecords.activity],
-          set: {
-            fullName,
-            institution,
-            role,
-            responseJson,
-            result: "Entrada registrada",
-            attempt: sql`${levelingRecords.attempt} + 1`,
-            responseVersion: sql`${levelingRecords.responseVersion} + 1`,
-            status: "completado",
-            confirmationCode: code,
-            updatedAt: sql`CURRENT_TIMESTAMP`,
-          },
-        });
+        },
+        {
+          fullName,
+          institution,
+          role,
+          responseJson,
+          result: "Entrada registrada",
+          attempt: increment(1),
+          responseVersion: increment(1),
+          status: "completado",
+          confirmationCode: code,
+          updatedAt: currentTimestamp,
+        },
+      );
 
-      const sheetSync = await syncToInstitutionalSheet({
-        action,
-        participantId,
-        fullName,
-        email,
-        institution,
-        role,
-        session: SESSION,
-        route: PREPARATORY_ROUTE,
-        activity: LEVELING_ATTENDANCE_ACTIVITY,
-        evidenceType: "Asistencia",
-        response: { consent: true },
-        result: "Entrada registrada",
-        status: "Completado",
-        confirmationCode: code,
-      });
       return Response.json(
         {
           ok: true,
           confirmationCode: code,
           message: "Tu entrada a la preparación de la Sesión 4 fue registrada. Al terminar, regístrate también en la sesión principal.",
           updatedPreviousResponse: Boolean(existing),
-          sheetSync: sheetSync.status,
+          sheetSync: "synced",
         },
         { status: existing ? 200 : 201 },
       );
@@ -209,16 +177,7 @@ export async function POST(request: Request) {
         );
       }
 
-      const [registration] = await db
-        .select({ participantId: levelingRecords.participantId, fullName: levelingRecords.fullName, institution: levelingRecords.institution, role: levelingRecords.role })
-        .from(levelingRecords)
-        .where(and(
-          eq(levelingRecords.email, email),
-          eq(levelingRecords.session, SESSION),
-          eq(levelingRecords.route, PREPARATORY_ROUTE),
-          eq(levelingRecords.activity, LEVELING_ATTENDANCE_ACTIVITY),
-        ))
-        .limit(1);
+      const [registration] = await db.find(levelingRecords, { email, session: SESSION, route: PREPARATORY_ROUTE, activity: LEVELING_ATTENDANCE_ACTIVITY }, { columns: ["participantId", "fullName", "institution", "role"], limit: 1 });
       if (!registration) {
         return Response.json(
           { error: "Primero registra tu entrada a la preparación con este mismo correo. Después podrás guardar la actividad." },
@@ -226,22 +185,13 @@ export async function POST(request: Request) {
         );
       }
 
-      const [existing] = await db
-        .select({ id: levelingRecords.id })
-        .from(levelingRecords)
-        .where(and(
-          eq(levelingRecords.email, email),
-          eq(levelingRecords.session, SESSION),
-          eq(levelingRecords.route, PREPARATORY_ROUTE),
-          eq(levelingRecords.activity, activity),
-        ))
-        .limit(1);
+      const [existing] = await db.find(levelingRecords, { email, session: SESSION, route: PREPARATORY_ROUTE, activity }, { columns: ["id"], limit: 1 });
       const code = confirmationCode("ACT4");
       const status = completed ? "completado" : "en_progreso";
 
-      await db
-        .insert(levelingRecords)
-        .values({
+      await db.upsert(
+        levelingRecords,
+        {
           participantId: registration.participantId,
           fullName: registration.fullName,
           email,
@@ -255,37 +205,18 @@ export async function POST(request: Request) {
           result,
           status,
           confirmationCode: code,
-        })
-        .onConflictDoUpdate({
-          target: [levelingRecords.email, levelingRecords.session, levelingRecords.route, levelingRecords.activity],
-          set: {
-            evidenceType,
-            responseJson,
-            result,
-            attempt: sql`${levelingRecords.attempt} + 1`,
-            responseVersion: sql`${levelingRecords.responseVersion} + 1`,
-            status,
-            confirmationCode: code,
-            updatedAt: sql`CURRENT_TIMESTAMP`,
-          },
-        });
-
-      const sheetSync = await syncToInstitutionalSheet({
-        action,
-        participantId: registration.participantId,
-        fullName: registration.fullName,
-        email,
-        institution: registration.institution,
-        role: registration.role,
-        session: SESSION,
-        route: PREPARATORY_ROUTE,
-        activity,
-        evidenceType,
-        response: JSON.parse(responseJson),
-        result,
-        status: completed ? "Completado" : "En progreso",
-        confirmationCode: code,
-      });
+        },
+        {
+          evidenceType,
+          responseJson,
+          result,
+          attempt: increment(1),
+          responseVersion: increment(1),
+          status,
+          confirmationCode: code,
+          updatedAt: currentTimestamp,
+        },
+      );
 
       return Response.json(
         {
@@ -294,7 +225,7 @@ export async function POST(request: Request) {
           status,
           message: completed ? "Actividad completada. Tu preparación fue registrada y ya puedes continuar." : "Tu avance fue guardado.",
           updatedPreviousResponse: Boolean(existing),
-          sheetSync: sheetSync.status,
+          sheetSync: "synced",
         },
         { status: existing ? 200 : 201 },
       );
@@ -313,29 +244,18 @@ export async function POST(request: Request) {
         );
       }
 
-      const [existing] = await db
-        .select({ id: attendance.id })
-        .from(attendance)
-        .where(and(eq(attendance.email, email), eq(attendance.session, SESSION)))
-        .limit(1);
+      const [existing] = await db.find(attendance, { email, session: SESSION }, { columns: ["id"], limit: 1 });
       const code = confirmationCode("AS4");
 
-      await db
-        .insert(attendance)
-        .values({ email, fullName, institution, role, session: SESSION, consent, confirmationCode: code })
-        .onConflictDoUpdate({
-          target: [attendance.session, attendance.email],
-          set: { fullName, institution, role, consent, confirmationCode: code, createdAt: sql`CURRENT_TIMESTAMP` },
-        });
+      await db.upsert(attendance, { email, fullName, institution, role, session: SESSION, consent, confirmationCode: code }, { fullName, institution, role, consent, confirmationCode: code, createdAt: currentTimestamp });
 
-      const sheetSync = await syncToInstitutionalSheet({ action, session: SESSION, email, fullName, institution, role, consent, confirmationCode: code });
       return Response.json(
         {
           ok: true,
           confirmationCode: code,
           message: "Tu asistencia a la Sesión 4 principal fue registrada correctamente.",
           updatedPreviousResponse: Boolean(existing),
-          sheetSync: sheetSync.status,
+          sheetSync: "synced",
         },
         { status: existing ? 200 : 201 },
       );
@@ -411,11 +331,7 @@ export async function POST(request: Request) {
         );
       }
 
-      const [mainAttendance] = await db
-        .select({ fullName: attendance.fullName })
-        .from(attendance)
-        .where(and(eq(attendance.email, email), eq(attendance.session, SESSION)))
-        .limit(1);
+      const [mainAttendance] = await db.find(attendance, { email, session: SESSION }, { columns: ["fullName"], limit: 1 });
       if (!mainAttendance) {
         return Response.json(
           { error: "Primero registra tu asistencia a la Sesión 4 principal con este mismo correo. Después podrás enviar la evidencia acreditable." },
@@ -423,23 +339,14 @@ export async function POST(request: Request) {
         );
       }
 
-      const [existing] = await db
-        .select({ participantId: sessionFourEvidence.participantId })
-        .from(sessionFourEvidence)
-        .where(and(
-          eq(sessionFourEvidence.email, email),
-          eq(sessionFourEvidence.session, SESSION),
-          eq(sessionFourEvidence.route, MAIN_ROUTE),
-          eq(sessionFourEvidence.activity, MAIN_EVIDENCE_ACTIVITY),
-        ))
-        .limit(1);
+      const [existing] = await db.find(sessionFourEvidence, { email, session: SESSION, route: MAIN_ROUTE, activity: MAIN_EVIDENCE_ACTIVITY }, { columns: ["participantId"], limit: 1 });
       const participantId = existing?.participantId || (await participantIdFor(email));
       const code = confirmationCode("EV4");
       const checklistJson = JSON.stringify(checklistResult.checklist);
 
-      await db
-        .insert(sessionFourEvidence)
-        .values({
+      await db.upsert(
+        sessionFourEvidence,
+        {
           participantId,
           fullName: mainAttendance.fullName,
           email,
@@ -467,70 +374,36 @@ export async function POST(request: Request) {
           checklistJson,
           status: "recibida",
           confirmationCode: code,
-        })
-        .onConflictDoUpdate({
-          target: [sessionFourEvidence.email, sessionFourEvidence.session, sessionFourEvidence.route, sessionFourEvidence.activity],
-          set: {
-            fullName: mainAttendance.fullName,
-            caseKey,
-            evaluationTitle,
-            educationalLevel,
-            subject,
-            difficultyLevel,
-            learningPurpose,
-            evaluationMoment,
-            pedagogicalContext,
-            sourceCase,
-            criteriaIndicators,
-            prompt,
-            aiDraft,
-            evidenceAnalysis,
-            generatedFeedback,
-            teacherReview,
-            detectedRisk,
-            adaptation,
-            finalDecision,
-            checklistJson,
-            attempt: sql`${sessionFourEvidence.attempt} + 1`,
-            responseVersion: sql`${sessionFourEvidence.responseVersion} + 1`,
-            status: "recibida",
-            confirmationCode: code,
-            updatedAt: sql`CURRENT_TIMESTAMP`,
-          },
-        });
+        },
+        {
+          fullName: mainAttendance.fullName,
+          caseKey,
+          evaluationTitle,
+          educationalLevel,
+          subject,
+          difficultyLevel,
+          learningPurpose,
+          evaluationMoment,
+          pedagogicalContext,
+          sourceCase,
+          criteriaIndicators,
+          prompt,
+          aiDraft,
+          evidenceAnalysis,
+          generatedFeedback,
+          teacherReview,
+          detectedRisk,
+          adaptation,
+          finalDecision,
+          checklistJson,
+          attempt: increment(1),
+          responseVersion: increment(1),
+          status: "recibida",
+          confirmationCode: code,
+          updatedAt: currentTimestamp,
+        },
+      );
 
-      const sheetSync = await syncToInstitutionalSheet({
-        action,
-        participantId,
-        fullName: mainAttendance.fullName,
-        email,
-        session: SESSION,
-        route: MAIN_ROUTE,
-        activity: MAIN_EVIDENCE_ACTIVITY,
-        caseKey,
-        evaluationTitle,
-        educationalLevel,
-        subject,
-        difficultyLevel,
-        learningPurpose,
-        evaluationMoment,
-        pedagogicalContext,
-        sourceCase,
-        criteriaIndicators,
-        prompt,
-        aiDraft,
-        evidenceAnalysis,
-        generatedFeedback,
-        teacherReview,
-        detectedRisk,
-        adaptation,
-        finalDecision,
-        checklist: checklistResult.checklist,
-        checklistAchieved: checklistResult.achieved,
-        checklistTotal: checklistResult.total,
-        status: "Recibida",
-        confirmationCode: code,
-      });
       const pdfAccessCode = await createPdfAccessCode("S4", email, code);
 
       return Response.json(
@@ -540,7 +413,7 @@ export async function POST(request: Request) {
           pdfAccessCode,
           message: "Tu evidencia de la Sesión 4 fue guardada correctamente. El registro incluye criterios, análisis, retroalimentación y decisión docente.",
           updatedPreviousResponse: Boolean(existing),
-          sheetSync: sheetSync.status,
+          sheetSync: "synced",
         },
         { status: existing ? 200 : 201 },
       );

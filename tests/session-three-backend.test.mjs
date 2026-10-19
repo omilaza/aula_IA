@@ -38,7 +38,7 @@ test("Session 3 evidence requires S3 attendance and validates level, difficulty 
 
   assert.match(
     route,
-    /eq\(attendance\.email, email\), eq\(attendance\.session, SESSION\)/,
+    /db\.find\(attendance, \{ email, session: SESSION \}/,
   );
   assert.match(route, /if \(!mainAttendance\)/);
   assert.match(route, /educationLevels\.has\(educationalLevel\)/);
@@ -46,7 +46,7 @@ test("Session 3 evidence requires S3 attendance and validates level, difficulty 
   assert.match(route, /checklistResult\.total !== selectedDifficultyChecklist\.length/);
   assert.match(route, /activity === LEVELING_ATTENDANCE_ACTIVITY/);
   assert.ok(
-    [...route.matchAll(/\.onConflictDoUpdate\(/g)].length >= 4,
+    [...route.matchAll(/db\.upsert\(/g)].length >= 4,
     "Each S3 record type must update its controlled prior response",
   );
 });
@@ -81,60 +81,32 @@ test("Session 3 migration is additive and leaves prior tables untouched", async 
   assert.doesNotMatch(migration, /session_two_evidence|leveling_records|attendance/);
 });
 
-test("Apps Script serializes sheet writes and preserves S1, S2 and S3 actions", async () => {
-  const script = await read("../google-apps-script/Code.gs");
-
+test("The private Sheets endpoint serializes writes and allows all course record tables", async () => {
+  const [script, schemaText] = await Promise.all([
+    read("../google-apps-script/Code.gs"),
+    read("../google-apps-script/schema.json"),
+  ]);
+  const schema = JSON.parse(schemaText);
   assert.match(script, /LockService\.getScriptLock\(\)/);
-  assert.match(script, /lock\.tryLock\(30000\)/);
+  assert.match(script, /lock\.tryLock\(20000\)/);
   assert.match(script, /finally\s*\{\s*lock\.releaseLock\(\);/s);
-  assert.match(script, /case 's3_main_attendance':/);
-  assert.match(script, /case 's3_evidence':/);
-  assert.match(script, /function saveSessionThreeEvidence_/);
-  assert.match(script, /requiredSheet_\(spreadsheet, 'S3_EVIDENCIAS'\)/);
-  assert.match(
-    script,
-    /const existing = row \? sheet\.getRange\(row, 1, 1, 8\)\.getValues\(\)\[0\] : \[\]/,
-  );
-  assert.match(script, /existing\[1\] \|\| new Date\(\)/);
-  assert.match(
-    script,
-    /clean_\(payload\.fullName\) \|\| clean_\(existing\[3\]\)/,
-  );
-  assert.match(
-    script,
-    /clean_\(payload\.educationalLevel\) \|\| clean_\(existing\[5\]\)/,
-  );
-  assert.match(
-    script,
-    /const evidenceType = normalizeLevelingEvidenceType_\(payload\.evidenceType\)/,
-  );
-  assert.match(script, /function normalizeLevelingEvidenceType_/);
-  assert.match(script, /'practica-guiada': 'practica-guiada'/);
-  assert.ok(
-    [...script.matchAll(/const sameSubmission = row/g)].length >= 3,
-    "Retries must not increase attempt/version for the same confirmation code",
-  );
-
-  for (const previousAction of [
-    "attendance",
-    "diagnostic",
-    "lab",
-    "exit",
-    "digital_diagnostic",
-    "s2_main_attendance",
-    "s2_evidence",
+  for (const table of [
+    "attendance", "diagnostics", "lab_evidence", "exit_tickets",
+    "digital_skill_diagnostics", "leveling_records", "session_two_evidence", "session_three_evidence",
   ]) {
-    assert.match(script, new RegExp(`case '${previousAction}':`));
+    assert.ok(schema[table], `Missing permitted table ${table}`);
   }
+  assert.deepEqual(schema.session_three_evidence.unique, ["email", "session", "route", "activity"]);
+  assert.ok(schema.session_three_evidence.columns.includes("educationalLevel"));
+  assert.ok(schema.session_three_evidence.columns.includes("fullName"));
 });
 
-test("Sheet synchronization retries immediately but reports a final failure honestly", async () => {
-  const sync = await read("../app/sheets-sync.ts");
-
-  assert.match(sync, /const retryDelays = \[0, 400, 1_200\]/);
-  assert.match(sync, /for \(let index = 0; index < retryDelays\.length; index \+= 1\)/);
-  assert.match(sync, /status: "synced", attempts: index \+ 1/);
-  assert.match(sync, /status: "failed"/);
-  assert.match(sync, /attempts: retryDelays\.length/);
-  assert.doesNotMatch(sync, /sincronizar[áa].*autom[aá]tic/i);
+test("The Sheets repository retries requests with one identifier and rejects unconfirmed writes", async () => {
+  const client = await read("../db/sheets-client.ts");
+  assert.match(client, /attempt < 3/);
+  assert.ok(client.indexOf("const requestId =") < client.indexOf("attempt < 3"));
+  assert.match(client, /data\.ok !== true/);
+  assert.match(client, /data\.requestId !== requestId/);
+  assert.match(client, /No se pudo confirmar el guardado/);
+  assert.doesNotMatch(client, /sincronizar[áa].*autom[aá]tic/i);
 });

@@ -28,25 +28,25 @@ test("S5P recovery reads only the final preparation activity from leveling recor
   const block = route.slice(start, end);
 
   assert.ok(start >= 0 && end > start);
-  assert.match(block, /\.from\(levelingRecords\)/);
-  assert.match(block, /eq\(levelingRecords\.session, "S5"\)/);
-  assert.match(block, /eq\(levelingRecords\.route, "preparatoria"\)/);
-  assert.match(block, /eq\(levelingRecords\.activity, "nivelacion-instrumentos"\)/);
+  assert.match(block, /db\.find\(\s*levelingRecords,/s);
+  assert.match(block, /session: "S5"/);
+  assert.match(block, /route: "preparatoria"/);
+  assert.match(block, /activity: "nivelacion-instrumentos"/);
   assert.match(block, /session: "S5P"/);
   assert.doesNotMatch(block, /sessionFiveEvidence|attendanceFor/);
 });
 
-test("S5 recovery reads only the authoritative principal D1 evidence", async () => {
+test("S5 recovery reads only the authoritative principal Sheets evidence", async () => {
   const route = await read("../app/api/evidence-pdf/route.ts");
   const start = route.indexOf("async function sessionFiveDocument");
   const end = route.indexOf("export async function loadEvidenceDocument", start);
   const block = route.slice(start, end);
 
   assert.ok(start >= 0 && end > start);
-  assert.match(block, /\.from\(sessionFiveEvidence\)/);
-  assert.match(block, /eq\(sessionFiveEvidence\.session, "S5"\)/);
-  assert.match(block, /eq\(sessionFiveEvidence\.route, "principal"\)/);
-  assert.match(block, /eq\(sessionFiveEvidence\.activity, "evidencia-principal"\)/);
+  assert.match(block, /db\.find\(\s*sessionFiveEvidence,/s);
+  assert.match(block, /session: "S5"/);
+  assert.match(block, /route: "principal"/);
+  assert.match(block, /activity: "evidencia-principal"/);
   assert.match(block, /session: "S5"/);
   assert.doesNotMatch(block, /\.insert\(|\.update\(|\.delete\(|syncToInstitutionalSheet/);
   assert.match(route, /verifyPdfAccessCode\(session, email, document\.confirmationCode, code\)/);

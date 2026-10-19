@@ -314,7 +314,7 @@ export function SessionTwo() {
     try {
       const checklist = Object.fromEntries(evidenceChecklist.map((item) => [item, Boolean(checks[item])]));
       const result = await postSessionTwo({ action: "s2_evidence", ...evidence, checklist });
-      const syncNote = result.sheetSync === "synced" ? " También quedó reflejada en la hoja institucional." : " El registro principal quedó protegido en la plataforma; la copia institucional podrá sincronizarse en cuanto el enlace esté disponible.";
+      const syncNote = " Guardado en la hoja institucional.";
       setEvidenceState({
         kind: "success",
         message: `${typeof result.message === "string" ? result.message : "Evidencia guardada."}${syncNote}`,

@@ -1,15 +1,5 @@
-import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
-import {
-  courseSatisfactionSurveyResponses,
-  courseSatisfactionSurveySync,
-} from "../../../db/schema";
-import {
-  courseSurveySheetPayload,
-  courseSurveyStoredSyncUpdate,
-  type CourseSurveySheetRow,
-} from "../../course-survey-sheet-sync";
-import { syncToInstitutionalSheet } from "../../sheets-sync";
+import { courseSatisfactionSurveyResponses } from "../../../db/schema";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const idempotencyKeyPattern = /^[A-Za-z0-9._:-]{8,160}$/;
@@ -89,100 +79,6 @@ function routeError(error: unknown) {
     return "La encuesta todavía no está disponible para recibir respuestas. No se guardó información.";
   }
   return "No fue posible registrar tu opinión. Conserva esta página abierta e inténtalo nuevamente.";
-}
-
-type CourseSurveyDb = ReturnType<typeof getDb>;
-
-async function ensureSheetSyncRecord(
-  db: CourseSurveyDb,
-  row: CourseSurveySheetRow,
-) {
-  await db
-    .insert(courseSatisfactionSurveySync)
-    .values({
-      idempotencyKey: row.idempotencyKey,
-      referenceCode: row.referenceCode,
-    })
-    .onConflictDoNothing({
-      target: courseSatisfactionSurveySync.idempotencyKey,
-    });
-}
-
-async function syncSurveyRow(db: CourseSurveyDb, row: CourseSurveySheetRow) {
-  await ensureSheetSyncRecord(db, row);
-  const [syncRecord] = await db
-    .select()
-    .from(courseSatisfactionSurveySync)
-    .where(eq(courseSatisfactionSurveySync.idempotencyKey, row.idempotencyKey))
-    .limit(1);
-  if (!syncRecord || syncRecord.status === "synced") {
-    return syncRecord?.status === "synced" ? "synced" : "pending";
-  }
-
-  const attemptedAt = new Date().toISOString();
-  const transport = await syncToInstitutionalSheet(courseSurveySheetPayload(row));
-  const verifiedTransport =
-    transport.status === "synced" && transport.referenceCode !== row.referenceCode
-      ? {
-          status: "failed" as const,
-          attempts: transport.attempts,
-          detail: "El receptor institucional no confirmó el folio esperado",
-        }
-      : transport;
-  const stored = courseSurveyStoredSyncUpdate(verifiedTransport, attemptedAt);
-  await db
-    .update(courseSatisfactionSurveySync)
-    .set({
-      status: stored.status,
-      attempts: sql`${courseSatisfactionSurveySync.attempts} + ${stored.attemptsDelta}`,
-      lastAttemptAt: stored.lastAttemptAt,
-      lastError: stored.lastError,
-      syncedAt: stored.syncedAt,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
-    })
-    .where(
-      stored.status === "synced"
-        ? eq(courseSatisfactionSurveySync.idempotencyKey, row.idempotencyKey)
-        : and(
-            eq(courseSatisfactionSurveySync.idempotencyKey, row.idempotencyKey),
-            ne(courseSatisfactionSurveySync.status, "synced"),
-          ),
-    );
-  const [finalRecord] = await db
-    .select({ status: courseSatisfactionSurveySync.status })
-    .from(courseSatisfactionSurveySync)
-    .where(eq(courseSatisfactionSurveySync.idempotencyKey, row.idempotencyKey))
-    .limit(1);
-  return finalRecord?.status === "synced"
-    ? "synced"
-    : finalRecord?.status === "failed"
-      ? "failed"
-      : "pending";
-}
-
-async function retryOneQueuedSurvey(
-  db: CourseSurveyDb,
-  currentIdempotencyKey: string,
-) {
-  const [queued] = await db
-    .select({ idempotencyKey: courseSatisfactionSurveySync.idempotencyKey })
-    .from(courseSatisfactionSurveySync)
-    .where(
-      and(
-        ne(courseSatisfactionSurveySync.idempotencyKey, currentIdempotencyKey),
-        inArray(courseSatisfactionSurveySync.status, ["pending", "failed"]),
-      ),
-    )
-    .orderBy(asc(courseSatisfactionSurveySync.id))
-    .limit(1);
-  if (!queued) return;
-
-  const [row] = await db
-    .select()
-    .from(courseSatisfactionSurveyResponses)
-    .where(eq(courseSatisfactionSurveyResponses.idempotencyKey, queued.idempotencyKey))
-    .limit(1);
-  if (row) await syncSurveyRow(db, row);
 }
 
 export async function GET() {
@@ -294,30 +190,11 @@ export async function POST(request: Request) {
 
   try {
     const db = getDb();
-    const [existing] = await db
-      .select()
-      .from(courseSatisfactionSurveyResponses)
-      .where(eq(courseSatisfactionSurveyResponses.idempotencyKey, idempotencyKey))
-      .limit(1);
-
-    if (existing) {
-      const sheetSync = await syncSurveyRow(db, existing);
-      if (sheetSync === "synced") {
-        await retryOneQueuedSurvey(db, existing.idempotencyKey);
-      }
-      return json({
-        ok: true,
-        referenceCode: existing.referenceCode,
-        message: "Tu opinión ya había sido registrada. Gracias por compartirla.",
-        idempotent: true,
-        sheetSync,
-      });
-    }
-
-    const newReferenceCode = referenceCode();
-    const responseInsert = db
-      .insert(courseSatisfactionSurveyResponses)
-      .values({
+    // The bridge checks the idempotency key and writes under one script lock.
+    // A retry therefore returns the original row and folio without replacing it.
+    const { row: saved, inserted } = await db.insertIfAbsent(
+      courseSatisfactionSurveyResponses,
+      {
         idempotencyKey,
         isAnonymous: !name && !email,
         name,
@@ -333,35 +210,10 @@ export async function POST(request: Request) {
         likedMost,
         improvements,
         additionalComments,
-        referenceCode: newReferenceCode,
-      })
-      .onConflictDoNothing({
-        target: courseSatisfactionSurveyResponses.idempotencyKey,
-      });
-    const syncInsert = db
-      .insert(courseSatisfactionSurveySync)
-      .values({
-        idempotencyKey,
-        referenceCode: newReferenceCode,
-      })
-      .onConflictDoNothing({
-        target: courseSatisfactionSurveySync.idempotencyKey,
-      });
-    await db.batch([responseInsert, syncInsert]);
-
-    const [saved] = await db
-      .select()
-      .from(courseSatisfactionSurveyResponses)
-      .where(eq(courseSatisfactionSurveyResponses.idempotencyKey, idempotencyKey))
-      .limit(1);
-    if (!saved) throw new Error("survey insert did not return a record");
-
-    const idempotent = saved.referenceCode !== newReferenceCode;
-    await ensureSheetSyncRecord(db, saved);
-    const sheetSync = await syncSurveyRow(db, saved);
-    if (sheetSync === "synced") {
-      await retryOneQueuedSurvey(db, saved.idempotencyKey);
-    }
+        referenceCode: referenceCode(),
+      },
+    );
+    const idempotent = !inserted;
     return json(
       {
         ok: true,
@@ -370,7 +222,7 @@ export async function POST(request: Request) {
           ? "Tu opinión ya había sido registrada. Gracias por compartirla."
           : "Tu opinión fue registrada. Gracias por ayudarnos a mejorar el curso.",
         ...(idempotent ? { idempotent: true } : {}),
-        sheetSync,
+        sheetSync: "synced",
       },
       idempotent ? 200 : 201,
     );

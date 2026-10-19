@@ -151,20 +151,15 @@ test("course survey requires only four ratings and validates a supplied email", 
   assert.doesNotMatch(route, /issues\.push\(\{\s*field: "(?:activitiesRating|materialsRating|recommendationApplication)"/s);
 });
 
-test("course survey returns the same folio on duplicate delivery without updating a row", async () => {
+test("course survey stores once in Sheets and returns the persisted folio on duplicate delivery", async () => {
   const route = await read("../app/api/course-survey/route.ts");
 
   assert.match(route, /const idempotencyKeyPattern = \/\^\[A-Za-z0-9\._:-\]\{8,160\}\$\//);
-  assert.match(route, /const \[existing\] = await db[\s\S]*?idempotencyKey/);
-  assert.match(route, /referenceCode: existing\.referenceCode,[\s\S]*?idempotent: true/);
-  assert.match(route, /\.onConflictDoNothing\(\{\s*target: courseSatisfactionSurveyResponses\.idempotencyKey,/s);
-  assert.match(route, /const idempotent = saved\.referenceCode !== newReferenceCode/);
-  assert.doesNotMatch(route, /onConflictDoUpdate|\.update\(courseSatisfactionSurveyResponses\)|\.delete\(/);
-  assert.match(route, /await db\.batch\(\[responseInsert, syncInsert\]\)/);
-  assert.ok(
-    route.indexOf("await db.batch([responseInsert, syncInsert])") <
-      route.lastIndexOf("const sheetSync = await syncSurveyRow(db, saved)"),
-    "the response and outbox must persist before the newly saved row is mirrored",
-  );
+  assert.match(route, /await db\.insertIfAbsent\(\s*courseSatisfactionSurveyResponses,/s);
+  assert.match(route, /const idempotent = !inserted/);
+  assert.match(route, /referenceCode: saved\.referenceCode/);
+  assert.match(route, /idempotent \? 200 : 201/);
+  assert.match(route, /sheetSync: "synced"/);
+  assert.doesNotMatch(route, /onConflictDoUpdate|\.update\(|\.delete\(|courseSatisfactionSurveySync|syncToInstitutionalSheet/);
   assert.match(route, /return `SURV-\$\{stamp\}-\$\{random\}`/);
 });

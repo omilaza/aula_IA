@@ -272,7 +272,7 @@ export function SessionFivePrep() {
         result: `Hallazgo: ${finding}\nAcción docente: ${teachingAction}\nNueva evidencia: ${newEvidence}\nDecisión sobre IA: ${aiDecision}. ${justification}`,
         completed: true,
       });
-      const syncNote = result.sheetSync === "synced" ? " También se reflejó en la hoja institucional." : result.sheetSync === "failed" ? " El registro quedó protegido en la plataforma; la réplica institucional requiere revisión." : " El registro quedó protegido en la plataforma; la conexión institucional no está configurada en este entorno.";
+      const syncNote = " Guardado en la hoja institucional.";
       setEvidenceState({ kind: "success", message: `${typeof result.message === "string" ? result.message : "Preparación guardada."}${syncNote}`, code: typeof result.confirmationCode === "string" ? result.confirmationCode : undefined, pdfAccessCode: typeof result.pdfAccessCode === "string" ? result.pdfAccessCode : undefined });
     } catch (error) {
       setEvidenceState({ kind: "error", message: error instanceof Error ? error.message : "No fue posible guardar. El borrador permanece en este dispositivo." });

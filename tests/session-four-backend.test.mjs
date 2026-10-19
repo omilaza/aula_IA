@@ -23,7 +23,7 @@ test("Session 4 backend separates preparation, attendance and accreditable evide
 
 test("Session 4 evidence requires attendance and validates the exact selected route", async () => {
   const route = await read("../app/api/session-four/route.ts");
-  assert.match(route, /eq\(attendance\.email, email\), eq\(attendance\.session, SESSION\)/);
+  assert.match(route, /db\.find\(attendance, \{ email, session: SESSION \}/);
   assert.match(route, /if \(!mainAttendance\)/);
   assert.match(route, /selectedCase\.level !== educationalLevel/);
   assert.match(route, /selectedCase\.subject !== subject/);
@@ -35,7 +35,7 @@ test("Session 4 evidence requires attendance and validates the exact selected ro
   assert.match(route, /missingCriticalFields/);
   assert.match(route, /fields: missingCriticalFields/);
   assert.match(route, /fields: missingChecklistItems/);
-  assert.ok([...route.matchAll(/\.onConflictDoUpdate\(/g)].length >= 4);
+  assert.ok([...route.matchAll(/db\.upsert\(/g)].length >= 4);
 });
 
 test("Session 4 reports every critical field while complementary metadata remains warning-only", async () => {
@@ -85,14 +85,16 @@ test("Session 4 changes difficulty without erasing shared answers or route-compa
   assert.doesNotMatch(chooseDifficulty, /resetCaseBoundEvidence/);
 });
 
-test("Session 4 mirrors only after D1 persistence and reports sheet state honestly", async () => {
+test("Session 4 confirms a primary Sheets save without a second mirror write", async () => {
   const route = await read("../app/api/session-four/route.ts");
-  const evidenceInsert = route.indexOf(".insert(sessionFourEvidence)");
-  const evidenceSync = route.lastIndexOf("syncToInstitutionalSheet");
-  assert.ok(evidenceInsert > 0);
-  assert.ok(evidenceSync > evidenceInsert);
-  assert.match(route, /sheetSync: sheetSync\.status/);
-  assert.doesNotMatch(route, /sincronizar[\s\S]{0,20}autom[aá]tic/i);
+  const evidenceStart = route.indexOf('action === "s4_evidence"');
+  const evidence = route.slice(evidenceStart);
+  const write = evidence.indexOf("await db.upsert(");
+  const confirmation = evidence.indexOf('sheetSync: "synced"');
+  assert.ok(write > 0);
+  assert.ok(confirmation > write);
+  assert.match(evidence, /db\.upsert\(\s*sessionFourEvidence,/);
+  assert.doesNotMatch(route, /syncToInstitutionalSheet|drizzle-orm/);
 });
 
 test("Session 4 migration is additive and leaves prior tables untouched", async () => {
